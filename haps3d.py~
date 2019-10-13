@@ -106,7 +106,7 @@ def main():
           for treeid in range(len(mintree)):
             treelist=list(mintree[treeid].edges)
             for tredge in treelist :
-              edgestr=str(mintree[treeid].edges[tredge]['mean_dist'])+';'+str(round(mintree[treeid].edges[tredge]['sd_dist'], 3))+';'+str(mintree[treeid].edges[tredge]['count'])
+              edgestr=str(mintree[treeid].edges[tredge]['mean_dist'])+';'+str(mintree[treeid].edges[tredge]['sd_dist'])+';'+str(mintree[treeid].edges[tredge]['count'])
               print(str(ii)+'_'+str(jj)+'_'+str(hapid+1)+'_'+str(treeid)+'\t'+edgestr+'\t'+tredge[0]+'\t'+tredge[1], file=outf)
       print('-----------------------------------------------------------------')
 

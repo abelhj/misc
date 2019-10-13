@@ -1,9 +1,10 @@
+#!/usr/bin/env python
+
 from __future__ import print_function
 import gzip
 import networkx as nx
 import re
 from collections import defaultdict
-import math
 import argparse
 
 def main():
@@ -23,7 +24,7 @@ def main():
   with gzip.open(infile, 'rb') as fp:
     line=fp.readline().strip()
     while line:
-      [chr, posall, read, ll, readpos, strand]=re.split('[;:\t]', line)
+      [chr, posall, read, readpos, strand]=re.split('[:\t]', line)
       [pos, ref, alt, refalt]=re.split('_', posall)
       readpos=int(readpos)
       allele=chr+':'+posall
@@ -40,18 +41,13 @@ def main():
             Gall.add_edge(allele, r1)
             Gall.edges[edge0]['count']=0
             Gall.edges[edge0]['dist']=0
-            Gall.edges[edge0]['dist_sq']=0
           Gall.edges[edge0]['count']=Gall.edges[edge0]['count']+1
-          dist=abs(reads[read][r1]-reads[read][allele])
-          Gall.edges[edge0]['dist']=Gall.edges[edge0]['dist']+dist
-          Gall.edges[edge0]['dist_sq']=Gall.edges[edge0]['dist_sq']+dist*dist
+          Gall.edges[edge0]['dist']=Gall.edges[edge0]['dist']+abs(reads[read][r1]-reads[read][allele])
       line=fp.readline().strip()
 
   #load locus graph
   for edge in Gall.edges:
-    mndist=Gall.edges[edge]['dist']/Gall.edges[edge]['count']
-    Gall.edges[edge]['mean_dist']=mndist
-    Gall.edges[edge]['sd_dist']=math.sqrt(Gall.edges[edge]['dist_sq']/Gall.edges[edge]['count']-mndist*mndist)
+    Gall.edges[edge]['mean_dist']=Gall.edges[edge]['dist']/Gall.edges[edge]['count']
     node1=Gall.nodes[edge[0]]
     node2=Gall.nodes[edge[1]]
     add_counts_edge(Gloc, node1, node2, Gall.edges[edge]['count'])
@@ -75,41 +71,43 @@ def main():
       else:
         Gconf.remove_edge(edge[0], edge[1])
 
-
-  with open(args.edgefile, 'w') as outf:
-    comp_loose=list(Gloc.subgraph(c).copy() for c in nx.connected_components(Gloc))
-    #iterate over connected components of loose locus graph, phase and merge if possible
-    for ii in range(len(comp_loose)):
-      gg_loose=comp_loose[ii].copy()
-      gg_conf=Gconf.subgraph(list(gg_loose.nodes())).copy()
-      gg=list(gg_conf.subgraph(cc).copy() for cc in nx.connected_components(gg_conf))
-      for jj in range(len(gg)):
-        ggsub1=gg[jj]
-        [h1, h2]=phase_conf_component(ggsub1)
-        print(str(ii)+'\t'+str(jj)+'\t'+str(gg_conf.number_of_nodes())+'\t'+str(ggsub1.number_of_nodes())+'\t'+str(len(h1)))
-      if len(gg)>1:
-        merge_all(gg_conf, ii, Gloc)
-      gg=list(gg_conf.subgraph(cc).copy() for cc in nx.connected_components(gg_conf))
-      if len(gg)>1 and args.strict==False:
-        merge_all(gg_conf, ii, Gloc, strict=False)
-      #list of connected graphs, post-merging
-      gg=list(gg_conf.subgraph(cc).copy() for cc in nx.connected_components(gg_conf))
-      for jj in range(len(gg)):
-        ggsub1=gg[jj]
-        haps=phase_conf_component(ggsub1, strict=False)
-        print(str(ii)+'\t'+str(jj)+'\t'+str(gg_conf.number_of_nodes())+'\t'+str(ggsub1.number_of_nodes())+'\t'+str(len(haps[0])))
-        #subgraphs of allele graph corresponding to allele on each haplotype
-        for hapid in range(2):
-          Gallsub=Gall.subgraph(haps[hapid]).copy()
-          minforest=nx.minimum_spanning_tree(Gallsub, weight='mean_dist')
-          mintree=list(minforest.subgraph(cc).copy() for cc in nx.connected_components(minforest))
-          for treeid in range(len(mintree)):
-            treelist=list(mintree[treeid].edges)
-            for tredge in treelist :
-              edgestr=str(mintree[treeid].edges[tredge]['mean_dist'])+';'+str(round(mintree[treeid].edges[tredge]['sd_dist'], 3))+';'+str(mintree[treeid].edges[tredge]['count'])
-              print(str(ii)+'_'+str(jj)+'_'+str(hapid+1)+'_'+str(treeid)+'\t'+edgestr+'\t'+tredge[0]+'\t'+tredge[1], file=outf)
-      print('-----------------------------------------------------------------')
-
+  try:
+    with open(args.edgefile, 'w') as outf:
+      comp_loose=list(Gloc.subgraph(c).copy() for c in nx.connected_components(Gloc))
+      #iterate over connected components of loose locus graph, phase and merge if possible
+      for ii in range(len(comp_loose)):
+        gg_loose=comp_loose[ii].copy()
+        gg_conf=Gconf.subgraph(list(gg_loose.nodes())).copy()
+        gg=list(gg_conf.subgraph(cc).copy() for cc in nx.connected_components(gg_conf))
+        for jj in range(len(gg)):
+          ggsub1=gg[jj]
+          [h1, h2]=phase_conf_component(ggsub1)
+          print(str(ii)+'\t'+str(jj)+'\t'+str(gg_conf.number_of_nodes())+'\t'+str(ggsub1.number_of_nodes())+'\t'+str(len(h1)))
+        if len(gg)>1:
+          print('merge 1')
+          merge_all(gg_conf, ii, Gloc)
+        gg=list(gg_conf.subgraph(cc).copy() for cc in nx.connected_components(gg_conf))
+        if len(gg)>1 and args.strict==False:
+          print('merge 2')
+          merge_all(gg_conf, ii, Gloc, strict=False)
+        #list of connected graphs, post-merging
+        gg=list(gg_conf.subgraph(cc).copy() for cc in nx.connected_components(gg_conf))
+        for jj in range(len(gg)):
+          ggsub1=gg[jj]
+          haps=phase_conf_component(ggsub1, strict=False)
+          print(str(ii)+'\t'+str(jj)+'\t'+str(gg_conf.number_of_nodes())+'\t'+str(ggsub1.number_of_nodes())+'\t'+str(len(haps[0])))
+          #subgraphs of allele graph corresponding to allele on each haplotype
+          for hapid in range(2):
+            Gallsub=Gall.subgraph(haps[hapid]).copy()
+            minforest=nx.minimum_spanning_tree(Gallsub, weight='mean_dist')
+            mintree=list(minforest.subgraph(cc).copy() for cc in nx.connected_components(minforest))
+            for treeid in range(len(mintree)):
+              treelist=list(mintree[treeid].edges)
+              for tredge in treelist :
+                print(str(ii)+'_'+str(jj)+'_'+str(hapid+1)+'_'+str(treeid)+'\t'+tredge[0]+'\t'+tredge[1], file=outf)
+        print('-----------------------------------------------------------------')
+  except Exception as e:
+    print(str(e))
 
 
 def add_locus_node(gg, locus, pos):
@@ -212,51 +210,43 @@ def phase_from_node(gg1, startnode, phased_nodes, bad_nodes, strict=True):
         bad_nodes.add(nextnode)
   return [hap1, hap2]
   
-
-
 def merge_all(gg_conf, ii,  G, strict=True):
   done=False
   time0=True
-  comps=[]
-  gg_cur=gg_conf.copy()
   while not done:
-    gg=list(gg_cur.subgraph(cc).copy() for cc in sorted(nx.connected_components(gg_cur), key=len, reverse=True))
+    gg=list(gg_conf.subgraph(cc).copy() for cc in nx.connected_components(gg_conf))
     for jj in range(len(gg)):
       ggsub1=gg[jj]
       [h1, h2]=phase_conf_component(ggsub1, strict=False)
+      if not time0:
+        print(str(ii)+'\t'+str(jj)+'\t'+str(gg_conf.number_of_nodes())+'\t'+str(ggsub1.number_of_nodes())+'\t'+str(len(h1)))
+      else:
+        time0=False
     if len(gg)==1:
       done=True
-      break  
-    ggmax=gg[0]
-    adds=0
-    for jj in range(1, len(gg)):
-      [aa, bb, cc, dd]=check_join(G, ggmax, gg[jj])
-      atot=aa+bb+cc+dd
-      oddsratio=(aa+1.0)*(dd+1.0)/(cc+1.0)/(bb+1.0)
-      if atot>0 and  (aa+dd==atot or (not strict and oddsratio>5)):
-        print('OR='+str(round(oddsratio, 3))+'\tcounterev='+str(atot-aa-dd)+'\tjoin\t'+str(strict)+'\t'+str(adds)+'\t'+str(jj)+' of '+str(len(gg)))
-        be=get_bridge_edge(G, ggmax, gg[jj], 'join')
-        add_bridge(G, gg_conf, be)
-        add_bridge(G, gg_cur, be)
-        gg_temp=list(gg_cur.subgraph(cc).copy() for cc in sorted(nx.connected_components(gg_cur), key=len, reverse=True))
-        ggmax=gg_temp[0]
-        [h1, h2]=phase_conf_component(ggmax, strict=False)
-        adds=adds+1
-      elif atot>0 and (bb+cc==atot or (not strict and oddsratio<0.2)):
-        print('OR='+str(round(oddsratio, 3))+'\tcounterev='+str(atot-bb-cc)+'\tflip\t'+str(strict)+'\t'+str(adds)+'\t'+str(jj)+' of '+str(len(gg)))
-        be=get_bridge_edge(G, ggmax, gg[jj], 'flip')
-        add_bridge(G, gg_conf, be)
-        add_bridge(G, gg_cur, be)
-        gg_temp=list(gg_cur.subgraph(cc).copy() for cc in sorted(nx.connected_components(gg_cur), key=len, reverse=True))
-        ggmax=gg_temp[0]
-        [h1, h2]=phase_conf_component(ggmax, strict=False)
-        adds=adds+1
-    if adds==0:
-      comps.append(ggmax)
-      for maxnode in list(ggmax.nodes):
-        gg_cur.remove_node(maxnode)
-
-
+      break
+    for kk in range(len(gg)-1):
+      for ll in range(kk+1, len(gg)):
+        print('checking '+str(kk)+' v '+str(ll))
+        [aa, bb, cc, dd]=check_join(G, gg[kk], gg[ll])
+        atot=aa+bb+cc+dd
+        oddsratio=(aa+1.0)*(dd+1.0)/(cc+1.0)/(bb+1.0)
+        if atot>0 and  (aa+dd==atot or (not strict and oddsratio>5)):
+          be=get_bridge_edge(G, gg[kk], gg[ll], 'join')
+          add_bridge(G, gg_conf, be)
+          print('OR='+str(round(oddsratio, 3))+'\tjoin')
+          break
+        elif atot>0 and (bb+cc==atot or (not strict and oddsratio<0.2)):
+          be=get_bridge_edge(G, gg[kk], gg[ll], 'flip')
+          add_bridge(G, gg_conf, be)
+          print('OR='+str(round(oddsratio, 3))+'\tflip')
+          break
+        elif kk==len(gg)-2 and ll==kk+1:
+          done=True
+          break
+      else:
+        continue
+      break
 
 def check_join(G, g1, g2):
   n1=g1.nodes()

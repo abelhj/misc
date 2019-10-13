@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 from __future__ import print_function
 import gzip
 import networkx as nx
@@ -10,6 +12,7 @@ def main():
   parser = argparse.ArgumentParser()
   parser.add_argument('-i', '--infile', type=str, default=None)
   parser.add_argument('-e', '--edgefile', type=str, default=None)
+  parser.add_argument('-p', '--hapfile', type=str, default=None)
   parser.add_argument('--strict', default=False, action='store_true')
   args = parser.parse_args()
 
@@ -23,16 +26,14 @@ def main():
   with gzip.open(infile, 'rb') as fp:
     line=fp.readline().strip()
     while line:
-      [chr, posall, read, ll, readpos, strand]=re.split('[;:\t]', line)
-      [pos, ref, alt, refalt]=re.split('_', posall)
+      [allele, read, readpos, strand]=re.split('[\t]', line)
+      [locus, ref, alt, refalt]=re.split('_', allele)
       readpos=int(readpos)
-      allele=chr+':'+posall
-      locus=chr+':'+pos
       reads[read][allele]=readpos
       if not locus in Gloc.nodes:
-        add_locus_node(Gloc, locus, posall)
+        add_locus_node(Gloc, locus, allele)
       if not allele in Gall.nodes:
-        add_allele_node(Gall, allele, locus)
+        add_allele_node(Gall, allele)
       for r1 in reads[read].keys():
         if r1!=allele:
           edge0=[allele, r1]
@@ -49,9 +50,9 @@ def main():
 
   #load locus graph
   for edge in Gall.edges:
-    mndist=Gall.edges[edge]['dist']/Gall.edges[edge]['count']
+    mndist=Gall.edges[edge]['dist']*1.0/Gall.edges[edge]['count']
     Gall.edges[edge]['mean_dist']=mndist
-    Gall.edges[edge]['sd_dist']=math.sqrt(Gall.edges[edge]['dist_sq']/Gall.edges[edge]['count']-mndist*mndist)
+    Gall.edges[edge]['sd_dist']=math.sqrt(Gall.edges[edge]['dist_sq']*1.0/Gall.edges[edge]['count']-mndist*mndist)
     node1=Gall.nodes[edge[0]]
     node2=Gall.nodes[edge[1]]
     add_counts_edge(Gloc, node1, node2, Gall.edges[edge]['count'])
@@ -76,7 +77,7 @@ def main():
         Gconf.remove_edge(edge[0], edge[1])
 
 
-  with open(args.edgefile, 'w') as outf:
+  with open(args.edgefile, 'w') as outf, open(args.hapfile, 'w') as outh:
     comp_loose=list(Gloc.subgraph(c).copy() for c in nx.connected_components(Gloc))
     #iterate over connected components of loose locus graph, phase and merge if possible
     for ii in range(len(comp_loose)):
@@ -106,8 +107,20 @@ def main():
           for treeid in range(len(mintree)):
             treelist=list(mintree[treeid].edges)
             for tredge in treelist :
-              edgestr=str(mintree[treeid].edges[tredge]['mean_dist'])+';'+str(round(mintree[treeid].edges[tredge]['sd_dist'], 3))+';'+str(mintree[treeid].edges[tredge]['count'])
+              curedge=mintree[treeid].edges[tredge]
+              edgestr=str(curedge['mean_dist'])+';'+str(round(curedge['sd_dist'], 3))+';'+str(curedge['count'])
               print(str(ii)+'_'+str(jj)+'_'+str(hapid+1)+'_'+str(treeid)+'\t'+edgestr+'\t'+tredge[0]+'\t'+tredge[1], file=outf)
+            terminal_nodes=[]
+            for node1 in list(mintree[treeid].nodes):
+              if mintree[treeid].degree(node1)==1:
+                terminal_nodes.append(node1)
+            for aa in range(len(terminal_nodes)-1):
+              for bb in range(aa+1, len(terminal_nodes)):
+                sp=nx.shortest_path(mintree[treeid], terminal_nodes[aa], terminal_nodes[bb])
+                for node1 in sp:
+                  print(str(ii)+'_'+str(jj)+'_'+str(hapid+1)+'_'+str(treeid)+'\t'+str(aa)+'_'+str(bb)+'\t'+node1, file=outh)
+            
+
       print('-----------------------------------------------------------------')
 
 
@@ -117,11 +130,11 @@ def add_locus_node(gg, locus, pos):
   splpos=re.split('_', pos)
   gg.nodes[locus]['alleles']={'r': splpos[1], 'a': splpos[2]}
 
-def add_allele_node(gg, allele, locus):
+def add_allele_node(gg, allele):
   gg.add_node(allele)
   spl=re.split('_', allele)
   gg.nodes[allele]['refalt']=spl[3]
-  gg.nodes[allele]['locus']=locus
+  gg.nodes[allele]['locus']=spl[0]
 
 def add_counts_edge(gg, node1, node2, count):
   if not [node1['locus'], node2['locus']] in gg.edges:
