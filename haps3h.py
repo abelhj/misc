@@ -16,6 +16,7 @@ def main():
   parser.add_argument('-e', '--edgefile', type=str, default=None)
   parser.add_argument('-p', '--hapfile', type=str, default=None)
   parser.add_argument('-b', '--bedfile', type=str, default=None)
+  parser.add_argument('-d', '--debugfile', type=str, default=None)
   parser.add_argument('--strict', default=False, action='store_true')
   args = parser.parse_args()
 
@@ -81,28 +82,35 @@ def main():
     mndist=curedge['dist']*1.0/curedge['count']
     sddist=math.sqrt(curedge['dist_sq']*1.0/curedge['count']-mndist*mndist)
     Gall.edges[edge].update({'mean_dist' : mndist, 'sd_dist': sddist})
-    add_counts_edge(Gloc, Gall, edge[0], edge[1], curedge['count'])
+    add_counts_edge(Gloc, Gall, edge[0], edge[1])
   print('locus graph')
   print('Memory usage info (Mb):\t'+str(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/usage_denom))
 
   # prune edges
 
   bad_edges=[]
-  edgelist=list(Gloc.edges)
-  for edge in edgelist:
-    curedge=Gloc.edges[edge]
-    [aa, bb, cc, dd]=[curedge['r', 'r'], curedge['r', 'a'], curedge['a', 'r'], curedge['a', 'a']]
-    pfloose=pre_filter_loose_pass(aa, bb, cc, dd)
-    pfstrict=pre_filter_strict_pass(aa, bb, cc, dd)
-    if not pfloose:
-      bad_edges.append(edge)
-      remove_allele_edges(edge[0], edge[1], Gall)
-      Gloc.remove_edge(edge[0], edge[1])
-    elif not pfstrict:
-      set_allele_edge_conf(edge[0], edge[1], Gall, False)
-      Gloc.edges[edge[0], edge[1]]['conf']=False
-    else:
-      set_allele_edge_conf(edge[0], edge[1], Gall, True)
+  edgelist=list(Gloc.edges) 
+  with open(args.debugfile, 'w') as outw:
+    for edge in edgelist:
+      curedge=Gloc.edges[edge]
+      [aa, bb, cc, dd]=[curedge['r', 'r'][0], curedge['r', 'a'][0], curedge['a', 'r'][0], curedge['a', 'a'][0]]
+      mn=[curedge['r', 'r'][1], curedge['r', 'a'][1], curedge['a', 'r'][1], curedge['a', 'a'][1]]
+      sd=[curedge['r', 'r'][2], curedge['r', 'a'][2], curedge['a', 'r'][2], curedge['a', 'a'][2]]
+      mnstr='\t'.join(map(str, mn))
+      ctstr='\t'.join(map(str, [aa, bb, cc, dd]))
+      sdstr='\t'.join(map( str, sd))
+      pfloose=pre_filter_loose_pass(aa, bb, cc, dd)
+      pfstrict=pre_filter_strict_pass(aa, bb, cc, dd)
+      print(edge[0]+'\t'+edge[1]+'\t'+ctstr+'\t'+mnstr+'\t'+sdstr+'\t'+id2loc[edge[0]]+'\t'+id2loc[edge[1]]+'\t'+str(pfloose)+'\t'+str(pfstrict), file=outw)
+      if not pfloose:
+        bad_edges.append(edge)
+        remove_allele_edges(edge[0], edge[1], Gall)
+        Gloc.remove_edge(edge[0], edge[1])
+      elif not pfstrict:
+        set_allele_edge_conf(edge[0], edge[1], Gall, False)
+        Gloc.edges[edge[0], edge[1]]['conf']=False
+      else:
+        set_allele_edge_conf(edge[0], edge[1], Gall, True)
       
 
   with open(args.edgefile, 'w') as outf, open(args.hapfile, 'w') as outh, open(args.bedfile, 'w') as outb:
@@ -173,17 +181,22 @@ def main():
   cp.print_stats()
 
 
-def add_counts_edge(gg, ggall, node1, node2, count):
+def add_counts_edge(gg, ggall, node1, node2):
   locus1=re.split('_', node1)[0]
   locus2=re.split('_', node2)[0]
+  alledge=ggall.edges[node1, node2]
   if not gg.has_edge(locus1, locus2):
     gg.add_edge(locus1, locus2)
-    gg.edges[locus1, locus2].update({'first': locus1, 'second': locus2, 'conf':True, ('a', 'a') : 0, ('a', 'r') : 0, ('r', 'a') : 0, ('r', 'r') : 0})
+    gg.edges[locus1, locus2].update({'first': locus1, 'second': locus2, 'conf':True, ('a', 'a') : [0, -1.0, -1.0], ('a', 'r') : [0, -1.0, -1.0], ('r', 'a') : [0, -1.0, -1.0], ('r', 'r') : [0, -1.0, -1.0]})
   curedge=gg.edges[locus1, locus2]
   if curedge['first']==locus1:
-    curedge[(ggall.nodes[node1]['refalt'], ggall.nodes[node2]['refalt'])]=count
+    curedge[(ggall.nodes[node1]['refalt'], ggall.nodes[node2]['refalt'])][0]=alledge['count']
+    curedge[(ggall.nodes[node1]['refalt'], ggall.nodes[node2]['refalt'])][1]=alledge['mean_dist']
+    curedge[(ggall.nodes[node1]['refalt'], ggall.nodes[node2]['refalt'])][2]=alledge['sd_dist']
   else:
-    curedge[(ggall.nodes[node2]['refalt'], ggall.nodes[node1]['refalt'])]=count
+    curedge[(ggall.nodes[node2]['refalt'], ggall.nodes[node1]['refalt'])][0]=alledge['count']
+    curedge[(ggall.nodes[node2]['refalt'], ggall.nodes[node1]['refalt'])][1]=alledge['mean_dist']
+    curedge[(ggall.nodes[node2]['refalt'], ggall.nodes[node1]['refalt'])][2]=alledge['sd_dist']
 
 def remove_allele_edges(node1, node2, ggall):
   all=['r', 'a']
@@ -275,10 +288,10 @@ def phase_from_node(gg1, startnode, phased_nodes,  strict=True):
         cur=[gg1.nodes[curnode]['phased_all'][1], gg1.nodes[curnode]['phased_all'][2]]
         if edata['first']==curnode:
           nextnode=edata['second']
-          [aa, bb, cc, dd]=[edata[(cur[0], 'r')], edata[(cur[0], 'a')], edata[(cur[1], 'r')], edata[(cur[1], 'a')]]
+          [aa, bb, cc, dd]=[edata[(cur[0], 'r')][0], edata[(cur[0], 'a')][0], edata[(cur[1], 'r')][0], edata[(cur[1], 'a')][0]]
         else:
           nextnode=edata['first']
-          [aa, bb, cc, dd]=[edata[('r', cur[0])], edata[('a', cur[0])], edata[('r', cur[1])], edata[('a', cur[1])]]
+          [aa, bb, cc, dd]=[edata[('r', cur[0])][0], edata[('a', cur[0])][0], edata[('r', cur[1])][0], edata[('a', cur[1])][0]]
         oddsratio=(aa+1.0)*(dd+1.0)/(bb+1.0)/(cc+1.0)
         if oddsratio>1:
           gg1.nodes[nextnode]['phased_all']={1: 'r', 2: 'a'}

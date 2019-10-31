@@ -103,11 +103,11 @@ def main():
         ggsub1=gg[jj]
         [h1, h2]=phase_conf_component(ggsub1)
         print(str(ii)+'\t'+str(jj)+'\t'+str(gg_conf.number_of_nodes())+'\t'+str(ggsub1.number_of_nodes())+'\t'+str(len(h1)))
-      if len(gg)>1:
-        merge_all(gg_conf, ii, Gloc)
-      gg=list(gg_conf.subgraph(cc).copy() for cc in nx.connected_components(gg_conf))
-      if len(gg)>1 and args.strict==False:
-        merge_all(gg_conf, ii, Gloc, strict=False)
+      #if len(gg)>1:
+      #  merge_all(gg_conf, ii, Gloc)
+      #gg=list(gg_conf.subgraph(cc).copy() for cc in nx.connected_components(gg_conf))
+      #if len(gg)>1 and args.strict==False:
+      #  merge_all(gg_conf, ii, Gloc, strict=False)
       #list of connected graphs, post-merging
       gg=list(gg_conf.subgraph(cc).copy() for cc in nx.connected_components(gg_conf))
       for jj in range(len(gg)):
