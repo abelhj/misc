@@ -9,7 +9,9 @@ import argparse
 import cProfile , pstats , resource
 import sys
 import code
-from collections import Counter
+from statistics import mode
+#code.interact(local=locals())
+
 
 
 def pre_filter_strict_pass(cts, minfrac=0.95):
@@ -18,7 +20,7 @@ def pre_filter_strict_pass(cts, minfrac=0.95):
   passf=False
   bal=-1
   if nn<2:
-    return False
+    passf=False
   elif (aa+dd)*1.0/nn>minfrac:
     bal=aa*1.0/(aa+dd)
   elif (bb+cc)*1.0/nn>minfrac:
@@ -32,10 +34,11 @@ def pre_filter_loose_pass(cts, minfrac=0.90):
   nn=aa+bb+cc+dd
   passf=False
   if nn < 2:
-    return False
+    passf=False
   elif  (aa+dd)*1.0/nn>minfrac or (bb+cc)*1.0/nn>minfrac:
     passf=True
   return passf
+
 
 def phase_conf_component(ggsub):
     maxnode=list(ggsub.nodes)[0]
@@ -81,21 +84,21 @@ def phase_from_node(gg1, startnode):
         else:
           gg1.nodes[nextnode]['phased_all']=[alleles[1], alleles[0]]
         hap0.append(get_phased_allele(gg1, nextnode, 0))
-        hap1.append(get_phased_allele(gg1, nextnode, 1))
+        hap1.append(get_phased_allele(gg1, nextnode, 0))
   return [hap0, hap1]
 
 def add_allele_edges(gg, loc1, loc2, cts, mns, sds):
-    [aa, bb, cc, dd]=cts
-    nn=sum(cts)
-    if aa>0:
-      gg.add_edge(loc1+'_0', loc2+'_0', ct=aa, mean_dist=mns[0], sd_dist=sds[0])
-    if dd>0:
-      gg.add_edge(loc1+'_1', loc2+'_1', ct=dd, mean_dist=mns[3], sd_dist=sds[3])
-    if bb>0:
-      gg.add_edge(loc1+'_0', loc2+'_1', ct=bb, mean_dist=mns[1], sd_dist=sds[1])
-    if cc>0:
-      gg.add_edge(loc1+'_1', loc2+'_0', ct=cc, mean_dist=mns[2], sd_dist=sds[2])
-                                        
+  [aa, bb, cc, dd]=cts
+  #code.interact(local=locals())  
+  nn=sum(cts)
+  if (aa+dd)*1.0/nn>0.5:
+    gg.add_edge(loc1+'_0', loc2+'_0', ct=aa, mean_dist=mns[0], sd_dist=sds[0])
+    gg.add_edge(loc1+'_1', loc2+'_1', ct=dd, mean_dist=mns[3], sd_dist=sds[3])
+  else:
+    gg.add_edge(loc1+'_0', loc2+'_1', ct=bb, mean_dist=mns[2], sd_dist=sds[2])
+    gg.add_edge(loc1+'_1', loc2+'_0', ct=cc, mean_dist=mns[1], sd_dist=sds[1])
+    
+
 def main():
   parser = argparse.ArgumentParser()
   parser.add_argument('-i', '--infile', type=str, default=None)
@@ -103,12 +106,11 @@ def main():
   parser.add_argument('-e', '--edgefile', type=str, default=None)
   parser.add_argument('-p', '--hapfile', type=str, default=None)
   args = parser.parse_args()
-  min_counts_strict=5
 
-  cp = cProfile.Profile()
-  cp.enable()
+  
   usage_denom=1024
   Gloc=nx.Graph()
+  #Gall=nx.Graph()
   infile=args.infile
 
   with gzip.open(infile, 'rb') as fp:
@@ -122,17 +124,12 @@ def main():
       mns=list(map(float, ll[6:10]))
       sds=list(map(float, ll[10:14])) 
       [loc1, loc2]=ll[0:2]
-      #if loc1=="chr9:17330061_T_C":
-      #  sys.stderr.write(line+'\n')
-      #  sys.stderr.write(str(pre_filter_strict_pass(cts))+'\n')
       if pre_filter_strict_pass(cts):
         Gloc.add_edge(loc1, loc2, order=[loc1, loc2], conf=True, cts=cts, mns=mns, sds=sds)
       elif pre_filter_loose_pass(cts):
         Gloc.add_edge(loc1, loc2,  order=[loc1, loc2], conf=False, cts=cts, mns=mns, sds=sds)
       line=fp.readline().strip().decode()
       ct+=1
-  #ys.exit(0)
-  #code.interact(local=locals())
 
   sys.stderr.write('finished loading graph\t'+str(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/usage_denom)+'\n')
   with gzip.open(args.edgefile, 'wt') as outf, gzip.open(args.hapfile, 'wt') as outh, gzip.open(args.bedfile, 'wt') as outb:
@@ -140,36 +137,34 @@ def main():
     for ii in range(len(comp_loose)):
       gg_loose=comp_loose[ii]
       selected_edges = [(u,v) for u,v,e in gg_loose.edges(data=True) if  e['conf'] == True]
-      gg_conf=gg_loose.edge_subgraph(selected_edges)
-      brlist=list(nx.bridges(gg_conf))
+      bad_edges = [(u,v) for u,v,e in gg_loose.edges(data=True) if  e['conf'] == False]
+      gg_conf = gg_loose.edge_subgraph(selected_edges)
+      brlist = list(nx.bridges(gg_conf))
       for edge in brlist:
         curedge=gg_loose.edges[edge]
-        if sum(curedge['cts'])<min_counts_strict:
+        if sum(curedge['cts'])<3 or min(curedge['cts'])<1:
           if abs(curedge['mns'][0]-curedge['mns'][0])>350 or abs(curedge['mns'][1]-curedge['mns'][2])>350:
             gg_loose.edges[edge].update({'conf': False})
       selected_edges = [(u,v) for u,v,e in gg_loose.edges(data=True) if  e['conf'] == True]
       bad_edges = [(u,v) for u,v,e in gg_loose.edges(data=True) if  e['conf'] == False]
       gg_conf=gg_loose.edge_subgraph(selected_edges)
-      gg=list(gg_conf.subgraph(cc) for cc in sorted(nx.connected_components(gg_conf), key=len, reverse=True))
       changed=True
+      min_counts_strict=5
       while changed:
-        changed=False
-        for kk in range(len(bad_edges)):
-          edge=bad_edges[kk]
+        changed = False
+        for edge in bad_edges:
           if gg_conf.has_node(edge[0]) and gg_conf.has_node(edge[1]):
-            for comp in gg:
-              if comp.has_node(edge[0]):
-                if comp.has_node(edge[1]):
-                  gg_loose.edges[edge].update({'conf': True})
-                  selected_edges.append(edge)
-                  changed=True
-                else:
-                  cts=gg_loose.edges[edge]['cts']
-                  nn=sum(cts)
-                  if nn>min_counts_strict and (cts[0]+cts[3]==nn or  cts[1]+cts[2]==nn):
-                    gg_loose.edges[edge].update({'conf': True})
-                    selected_edges.append(edge)
-                    changed=True
+            if edge[1] in nx.node_connected_component(gg_conf, edge[0]):
+              gg_loose.edges[edge].update({'conf': True})
+              selected_edges.append(edge)
+              changed=True
+            else:
+              cts=gg_loose.edges[edge]['cts']
+              nn=sum(cts)
+              if nn>min_counts_strict and (cts[0]+cts[3]==nn or  cts[1]+cts[2]==nn):
+                gg_loose.edges[edge].update({'conf': True})
+                selected_edges.append(edge)
+                changed=True
           elif (gg_conf.has_node(edge[0]) and not gg_conf.has_node(edge[1])) or (gg_conf.has_node(edge[1]) and not gg_conf.has_node(edge[0])):
             cts=gg_loose.edges[edge]['cts']
             nn=sum(cts)
@@ -179,19 +174,15 @@ def main():
               changed=True
         bad_edges = [(u,v) for u,v,e in gg_loose.edges(data=True) if  e['conf'] == False]
         gg_conf=gg_loose.edge_subgraph(selected_edges)
-        gg=list(gg_conf.subgraph(cc) for cc in sorted(nx.connected_components(gg_conf), key=len, reverse=True))
+      gg=list(gg_conf.subgraph(cc) for cc in sorted(nx.connected_components(gg_conf), key=len, reverse=True))
       Gall=nx.Graph()
       for jj in range(len(gg)):
         for edge in list(gg[jj].edges()):
           curedge=gg[jj].edges[edge]
-          if edge[0]==curedge['order'][0]:
-            [loc0, loc1]=edge
-          else:
-            [loc1, loc0]=edge
-          add_allele_edges(Gall, loc0, loc1, curedge['cts'], curedge['mns'], curedge['sds'])
+          add_allele_edges(Gall, edge[0], edge[1], curedge['cts'], curedge['mns'], curedge['sds']) 
           print(str(ii)+'\t'+str(jj)+'\t'+edge[0]+'\t'+edge[1]+'\t'+str(curedge['cts'])+'\t'+str(curedge['mns'])+'\t'+str(curedge['sds']))
       for jj in range(len(gg)):
-        haps=phase_conf_component(gg[jj])
+        haps=phase_conf_component(gg[jj]))
         for hapid in range(2):
           minforest=nx.minimum_spanning_tree(Gall.subgraph(haps[hapid]), weight='mean_dist')
           mintree=list(minforest.subgraph(cc) for cc in nx.connected_components(minforest))
@@ -199,8 +190,7 @@ def main():
             id=(str(ii)+'_'+str(jj)+'_'+str(hapid)+'_'+str(treeid))
             treelist=list(mintree[treeid].edges)
             nodes=[int(re.split('[:_]', node)[1]) for node in mintree[treeid].nodes]
-            chrs=[re.split('[:_]', node)[0] for node in mintree[treeid].nodes]
-            chr=Counter(chrs).most_common(1)[0][0]
+            chr=mode([re.split('[:_]', node)[0] for node in mintree[treeid].nodes])
             nodes.sort()
             dists=[]
             ones=[]
@@ -230,9 +220,10 @@ def main():
                     outstr=str(mintree[treeid].degree(node1))+'\t'+str(prevedge['ct'])+'_'+str(prevedge['mean_dist'])+'_'+str(prevedge['sd_dist'])
                   print(id+'\t'+str(aa)+'_'+str(bb)+'\t'+outstr+'\t'+node1, file=outh)
       sys.stderr.write(str(ct)+'\t'+str(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/usage_denom)+'\n')
-      
-  cp.disable()
-  cp.print_stats()
+      #print('Memory usage info (Mb):\t'+str(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/usage_denom))
+
+#  cp.disable()
+#  cp.print_stats()
                                            
                                              
 
