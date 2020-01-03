@@ -198,7 +198,7 @@ def main():
           if loc1<loc0:
             [loc0, loc1]=[loc1, loc0]
           add_allele_edges(Gall, loc0, loc1, curedge['cts'], curedge['mns'])
-          print(str(ii)+'\t'+str(jj)+'\t'+edge[0]+'\t'+edge[1]+'\t'+str(curedge['cts'])+'\t'+str(curedge['mns'])), file=outc)
+          print(str(ii)+'\t'+str(jj)+'\t'+edge[0]+'\t'+edge[1]+'\t'+str(curedge['cts'])+'\t'+str(curedge['mns']), file=outc)
         if gg[jj].number_of_edges()==0:
           singleton=list(gg[jj].nodes())[0]
           Gall.add_node(singleton+'_0')
