@@ -239,7 +239,7 @@ def main():
                       outstr=str(mintree[treeid].degree(node1))+'\t.'
                     else:
                       prevedge=mintree[treeid].edges[sp[nodeii], sp[nodeii-1]]
-                      outstr=str(mintree[treeid].degree(node1))+'\t'+str(prevedge['ct'])+'_'+str(prevedge['mean_dist']))
+                      outstr=str(mintree[treeid].degree(node1))+'\t'+str(prevedge['ct'])+'_'+str(prevedge['mean_dist'])
                     print(id+'\t'+str(aa)+'_'+str(bb)+'\t'+outstr+'\t'+node1, file=outh)
             else:
               node1=list(mintree[treeid].nodes)[0]
