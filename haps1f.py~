@@ -37,7 +37,6 @@ def pre_filter_loose_pass(cts, minfrac=0.90):
     passf=True
   return passf
 
-
 def phase_conf_component_tree(ggsub):
   tr=nx.minimum_spanning_tree(ggsub, weight='wt')
   startnode=''
@@ -64,7 +63,6 @@ def check_phase(ggsub):
         error_count+=1
   return error_count                                                            
 
-
 def phase_from_node_tree(gg1, tree, startnode):
   hap0=[]
   hap1=[]
@@ -78,37 +76,35 @@ def phase_from_node_tree(gg1, tree, startnode):
       if 'phased_all' in gg1.nodes[prevnode]:
         alleles=gg1.nodes[prevnode]['phased_all']
         oddsratio=(edata['cts'][0]+1.0)*(edata['cts'][3]+1.0)/((edata['cts'][1]+1.0)*(edata['cts'][2]+1.0))
-        if oddsratio<1:
-          alleles.reverse()
-        gg1.nodes[curnode]['phased_all']=alleles
+        if oddsratio>1:
+          gg1.nodes[curnode]['phased_all']=alleles
+        else:
+          gg1.nodes[curnode]['phased_all']=[alleles[1], alleles[0]] 
         hap0.append(get_phased_allele(gg1, curnode, 0))
         hap1.append(get_phased_allele(gg1, curnode, 1))
       else:
         sys.stderr.write('error, prev node unphased\n')
         sys.exit(1)
   return([hap0, hap1])
-                                                                                                                                        
-
 
 def get_phased_allele(gg, node, hap):
   refalt=gg.nodes[node]['phased_all'][hap]
   return(node+'_'+str(refalt))
 
-
-def add_allele_edges(gg, loc1, loc2, cts, mns, sds):
+def add_allele_edges(gg, loc1, loc2, cts, mns):
     [aa, bb, cc, dd]=cts
     oddsratio=(aa+1.0)*(dd+1.0)/((bb+1.0)*(cc+1.0))
     nn=sum(cts)
     if oddsratio>1:
       if aa>0:
-        gg.add_edge(loc1+'_0', loc2+'_0', ct=aa, mean_dist=mns[0], sd_dist=sds[0])
+        gg.add_edge(loc1+'_0', loc2+'_0', ct=aa, mean_dist=mns[0])
       if dd>0:
-        gg.add_edge(loc1+'_1', loc2+'_1', ct=dd, mean_dist=mns[3], sd_dist=sds[3])
+        gg.add_edge(loc1+'_1', loc2+'_1', ct=dd, mean_dist=mns[3])
     elif oddsratio<1:
       if bb>0:
-        gg.add_edge(loc1+'_0', loc2+'_1', ct=bb, mean_dist=mns[1], sd_dist=sds[1])
+        gg.add_edge(loc1+'_0', loc2+'_1', ct=bb, mean_dist=mns[1])
       if cc>0:
-        gg.add_edge(loc1+'_1', loc2+'_0', ct=cc, mean_dist=mns[2], sd_dist=sds[2])
+        gg.add_edge(loc1+'_1', loc2+'_0', ct=cc, mean_dist=mns[2])
                                         
 def main():
   parser = argparse.ArgumentParser()
@@ -125,9 +121,8 @@ def main():
   cp.enable()
   usage_denom=1024
   Gloc=nx.Graph()
-  infile=args.infile
 
-  with gzip.open(infile, 'rt') as fp:
+  with gzip.open(args.infile, 'rt') as fp:
     line=fp.readline().strip()
     ct=0
     while line :
@@ -151,6 +146,13 @@ def main():
         Gloc.add_node(loc2)
       line=fp.readline().strip()
       ct+=1
+
+  with gzip.open(args.singletons, 'rt') as fp:
+    line=fp.readline().strip()
+    while line:
+      if not Gloc.has_node(line):
+        Gloc.add_node(line)
+      line=fp.readline().strip()
 
   sys.stderr.write('finished loading graph\t'+str(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/usage_denom)+'\n')
   with gzip.open(args.edgefile, 'wt') as outf, gzip.open(args.hapfile, 'wt') as outh, gzip.open(args.bedfile, 'wt') as outb, gzip.open(args.compfile, 'wt') as outc:
@@ -179,20 +181,20 @@ def main():
           if gg[jj].has_node(edge[0]) and gg[jj].has_node(edge[1]):
             oddsratio=(edge[2]['cts'][0]+1.0)*(edge[2]['cts'][3]+1.0)/((edge[2]['cts'][1]+1.0)*(edge[2]['cts'][2]+1.0))
             if (oddsratio>1 and gg[jj].nodes[edge[0]]['phased_all']==gg[jj].nodes[edge[1]]['phased_all']) or (oddsratio<1 and not gg[jj].nodes[edge[0]]['phased_all']==gg[jj].nodes[edge[1]]['phased_all']):
-              gg[jj].add_edge(edge[0], edge[1], order=edge[2]['order'], conf=True, mns=edge[2]['mns'], cts=edge[2]['cts'], sds=edge[2]['sds'], wt=edge[2]['wt'])
+              gg[jj].add_edge(edge[0], edge[1],  conf=True, mns=edge[2]['mns'], cts=edge[2]['cts'], wt=edge[2]['wt'])
         ec=check_phase(gg[jj])
         if ec>0:
           sys.stderr.write('phase error '+str(jj)+'\n')
-
+          code.interact(local=locals())
+         
         Gall=nx.Graph()
         for edge in list(gg[jj].edges()):
           curedge=gg[jj].edges[edge]
-          if edge[0]==curedge['order'][0]:
-            [loc0, loc1]=edge
-          else:
-            [loc1, loc0]=edge
-          add_allele_edges(Gall, loc0, loc1, curedge['cts'], curedge['mns'], curedge['sds'])
-          print(str(ii)+'\t'+str(jj)+'\t'+edge[0]+'\t'+edge[1]+'\t'+str(curedge['cts'])+'\t'+str(curedge['mns'])+'\t'+str(curedge['sds']), file=outc)
+          [loc0, loc1]=edge
+          if loc1<loc0:
+            [loc0, loc1]=[loc1, loc0]
+          add_allele_edges(Gall, loc0, loc1, curedge['cts'], curedge['mns'])
+          print(str(ii)+'\t'+str(jj)+'\t'+edge[0]+'\t'+edge[1]+'\t'+str(curedge['cts'])+'\t'+str(curedge['mns']), file=outc)
         if gg[jj].number_of_edges()==0:
           singleton=list(gg[jj].nodes())[0]
           Gall.add_node(singleton+'_0')
@@ -217,7 +219,7 @@ def main():
             print(chr+'\t'+str(nodes[0])+'\t'+str(max(nodes))+'\t'+id+'\t100\t.\t'+str(nodes[0])+'\t'+str(max(nodes))+'\t150,150,0\t'+str(len(dists))+'\t'+onestr+'\t'+dstr, file=outb)
             for tredge in treelist:
               curedge=mintree[treeid].edges[tredge]
-              edgestr=str(round(curedge['mean_dist'], 3))+';'+str(round(curedge['sd_dist'], 3))+';'+str(curedge['ct'])
+              edgestr=str(round(curedge['mean_dist'], 3))+';'+str(curedge['ct'])
               print(id+'\t'+edgestr+'\t'+tredge[0]+'\t'+tredge[1], file=outf)
             terminal_nodes=[]
             if len(list(mintree[treeid].nodes))>1:
@@ -233,11 +235,12 @@ def main():
                       outstr=str(mintree[treeid].degree(node1))+'\t.'
                     else:
                       prevedge=mintree[treeid].edges[sp[nodeii], sp[nodeii-1]]
-                      outstr=str(mintree[treeid].degree(node1))+'\t'+str(prevedge['ct'])+'_'+str(prevedge['mean_dist'])+'_'+str(prevedge['sd_dist'])
+                      outstr=str(mintree[treeid].degree(node1))+'\t'+str(prevedge['ct'])+'_'+str(prevedge['mean_dist'])
                     print(id+'\t'+str(aa)+'_'+str(bb)+'\t'+outstr+'\t'+node1, file=outh)
             else:
               node1=list(mintree[treeid].nodes)[0]
               print(id+'\t0_0\t0\t0_0_0\t'+node1, file=outh)
+
                   
       sys.stderr.write(str(ct)+'\t'+str(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/usage_denom)+'\n')
       

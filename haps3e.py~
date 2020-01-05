@@ -7,6 +7,7 @@ import re
 from collections import defaultdict
 import math
 import argparse
+import cProfile , pstats , resource
 
 def main():
   parser = argparse.ArgumentParser()
@@ -19,8 +20,10 @@ def main():
   Gall=nx.Graph()
   Gloc=nx.Graph()
   infile=args.infile
+  usage_denom=1024*1000
 
-
+  print('before')
+  print('Memory usage info (Mb):\t'+str(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/usage_denom))
   #load allele graph
   reads=defaultdict(dict)
   with gzip.open(infile, 'rb') as fp:
@@ -48,6 +51,9 @@ def main():
           Gall.edges[edge0]['dist_sq']=Gall.edges[edge0]['dist_sq']+dist*dist
       line=fp.readline().strip()
 
+  print('allele graph')
+  print('Memory usage info (Mb):\t'+str(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/usage_denom))
+
   #load locus graph
   for edge in Gall.edges:
     mndist=Gall.edges[edge]['dist']*1.0/Gall.edges[edge]['count']
@@ -56,6 +62,13 @@ def main():
     node1=Gall.nodes[edge[0]]
     node2=Gall.nodes[edge[1]]
     add_counts_edge(Gloc, node1, node2, Gall.edges[edge]['count'])
+
+  import code
+  code.interact(local=locals())
+
+
+  print('locus graph')
+  print('Memory usage info (Mb):\t'+str(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/usage_denom))
 
   #create strict locus graph and prune edges
   Gconf=Gloc.copy()
@@ -76,6 +89,8 @@ def main():
       else:
         Gconf.remove_edge(edge[0], edge[1])
 
+  print('strict locus  graph')
+  print('Memory usage info (Mb):\t'+str(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/usage_denom))
 
   with open(args.edgefile, 'w') as outf, open(args.hapfile, 'w') as outh:
     comp_loose=list(Gloc.subgraph(c).copy() for c in nx.connected_components(Gloc))
@@ -108,7 +123,7 @@ def main():
             treelist=list(mintree[treeid].edges)
             for tredge in treelist :
               curedge=mintree[treeid].edges[tredge]
-              edgestr=str(curedge['mean_dist'])+';'+str(round(curedge['sd_dist'], 3))+';'+str(curedge['count'])
+              edgestr=str(round(curedge['mean_dist'], 3))+';'+str(round(curedge['sd_dist'], 3))+';'+str(curedge['count'])
               print(str(ii)+'_'+str(jj)+'_'+str(hapid+1)+'_'+str(treeid)+'\t'+edgestr+'\t'+tredge[0]+'\t'+tredge[1], file=outf)
             terminal_nodes=[]
             for node1 in list(mintree[treeid].nodes):
@@ -117,11 +132,18 @@ def main():
             for aa in range(len(terminal_nodes)-1):
               for bb in range(aa+1, len(terminal_nodes)):
                 sp=nx.shortest_path(mintree[treeid], terminal_nodes[aa], terminal_nodes[bb])
-                for node1 in sp:
-                  print(str(ii)+'_'+str(jj)+'_'+str(hapid+1)+'_'+str(treeid)+'\t'+str(aa)+'_'+str(bb)+'\t'+node1, file=outh)
+                for nodeii in range(len(sp)):
+                  node1=sp[nodeii]
+                  if nodeii==0:
+                    outstr=str(mintree[treeid].degree(node1))+'\t.'
+                  else:
+                    prevedge=mintree[treeid].edges[sp[nodeii], sp[nodeii-1]]
+                    outstr=str(mintree[treeid].degree(node1))+'\t'+str(prevedge['count'])+'_'+str(prevedge['dist'])+'_'+str(prevedge['dist_sq'])
+                  print(str(ii)+'_'+str(jj)+'_'+str(hapid+1)+'_'+str(treeid)+'\t'+str(aa)+'_'+str(bb)+'\t'+outstr+'\t'+node1, file=outh)
             
 
       print('-----------------------------------------------------------------')
+      print('Memory usage info (Mb):\t'+str(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/usage_denom))
 
 
 

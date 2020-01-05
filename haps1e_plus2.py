@@ -273,55 +273,55 @@ def main():
 
   super_comps=list(superg.subgraph(c) for c in sorted(nx.connected_components(superg), key=len, reverse=True))
   edgelist=list(superg.edges(data=True))
-                    
-  for ii in range(len(edgelist)):
-    edge=edgelist[ii]
-    [inner, outer, tot, aa, bb, cc, dd]=[0,0,0,0,0,0,0]
-    for cts in edge[2]['cts_all']:
-      if cts[1]+cts[2]==0:
-        outer+=1
-        if cts[0]>aa:
-          aa=cts[0]
-        if cts[3]>dd
-          dd=cts[3]
-      elif cts[0]+cts[3]==0:
-        inner+=1
-        if cts[1]>bb:
-          bb=cts[1]
-        if cts[2]>cc
-          cts[2]=cc
-      tot+=1
-    frac_inner=inner/(0.0+tot)
-    frac_outer=outer/(0.0+tot)
-    conf=0
-    if edge[2]['conf'][1]>0:
-      if frac_inner>0.95:
-        edge[2]['cts']=[aa, bb, cc, dd]
-        edge[2]['conf1']=1
-      elif frac_outer>0.95:
-        edge[2]['cts'][aa, bb, cc, dd]
-        edge[2]['conf1']=1
-      else:
-        edge[2]['conf1']=0
-    else:
-       edge[2]['conf1']=0
-
-  selected_edges = [(u,v) for u,v,e in superg.edges(data=True) if  e['conf1'] == 1]
-  bad_edges = [(u,v) for u,v,e in superg.edges(data=True) if  e['conf1'] == 0]
-  superg_conf=superg.edge_subgraph(selected_edges).copy()
-
-  for edge in superg.edges(data=True):
-    if 'hifi' in edge[2]['evtype']:
-      sys.stderr.write(str(edge)+'\n')
-  
-  super_conf_comps=list(superg_conf.subgraph(c) for c in sorted(nx.connected_components(superg_conf), key=len, reverse=True))
-
-  ii=0
-  superg_conf=super_comps[ii].edge_subgraph(selected_edges).copy()
-  super_conf_comps=list(superg_conf.subgraph(c) for c in sorted(nx.connected_components(superg_conf), key=len, reverse=True))
-  code.interact(local=locals()) 
-  cp.disable()
-  cp.print_stats()
+  sys.exit(0)                  
+#  for ii in range(len(edgelist)):
+#    edge=edgelist[ii]
+#    [inner, outer, tot, aa, bb, cc, dd]=[0,0,0,0,0,0,0]
+#    for cts in edge[2]['cts_all']:
+#      if cts[1]+cts[2]==0:
+#        outer+=1
+#        if cts[0]>aa:
+#          aa=cts[0]
+#        if cts[3]>dd
+#          dd=cts[3]
+#      elif cts[0]+cts[3]==0:
+#        inner+=1
+#        if cts[1]>bb:
+#          bb=cts[1]
+#        if cts[2]>cc
+#          cts[2]=cc
+#      tot+=1
+#    frac_inner=inner/(0.0+tot)
+#    frac_outer=outer/(0.0+tot)
+#    conf=0
+#    if edge[2]['conf'][1]>0:
+#      if frac_inner>0.95:
+#        edge[2]['cts']=[aa, bb, cc, dd]
+#        edge[2]['conf1']=1
+#      elif frac_outer>0.95:
+#        edge[2]['cts'][aa, bb, cc, dd]
+#        edge[2]['conf1']=1
+#      else:
+#        edge[2]['conf1']=0
+#    else:
+#       edge[2]['conf1']=0
+#
+#  selected_edges = [(u,v) for u,v,e in superg.edges(data=True) if  e['conf1'] == 1]
+#  bad_edges = [(u,v) for u,v,e in superg.edges(data=True) if  e['conf1'] == 0]
+#  superg_conf=superg.edge_subgraph(selected_edges).copy()
+#
+#  for edge in superg.edges(data=True):
+#    if 'hifi' in edge[2]['evtype']:
+#      sys.stderr.write(str(edge)+'\n')
+#  
+#  super_conf_comps=list(superg_conf.subgraph(c) for c in sorted(nx.connected_components(superg_conf), key=len, reverse=True))
+#
+#  ii=0
+#  superg_conf=super_comps[ii].edge_subgraph(selected_edges).copy()
+#  super_conf_comps=list(superg_conf.subgraph(c) for c in sorted(nx.connected_components(superg_conf), key=len, reverse=True))
+#  code.interact(local=locals()) 
+#  cp.disable()
+#  cp.print_stats()
                                            
                                              
 
