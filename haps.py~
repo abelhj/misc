@@ -7,7 +7,6 @@ import re
 from collections import defaultdict
 import math
 import argparse
-import cProfile , pstats , resource
 
 def main():
   parser = argparse.ArgumentParser()
@@ -20,10 +19,8 @@ def main():
   Gall=nx.Graph()
   Gloc=nx.Graph()
   infile=args.infile
-  usage_denom=1024*1000
 
-  print('before')
-  print('Memory usage info (Mb):\t'+str(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/usage_denom))
+
   #load allele graph
   reads=defaultdict(dict)
   with gzip.open(infile, 'rb') as fp:
@@ -51,9 +48,6 @@ def main():
           Gall.edges[edge0]['dist_sq']=Gall.edges[edge0]['dist_sq']+dist*dist
       line=fp.readline().strip()
 
-  print('allele graph')
-  print('Memory usage info (Mb):\t'+str(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/usage_denom))
-
   #load locus graph
   for edge in Gall.edges:
     mndist=Gall.edges[edge]['dist']*1.0/Gall.edges[edge]['count']
@@ -63,15 +57,9 @@ def main():
     node2=Gall.nodes[edge[1]]
     add_counts_edge(Gloc, node1, node2, Gall.edges[edge]['count'])
 
-  import code
-  code.interact(local=locals())
-
-
-  print('locus graph')
-  print('Memory usage info (Mb):\t'+str(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/usage_denom))
-
   #create strict locus graph and prune edges
   Gconf=Gloc.copy()
+  Gallconf=Gall.copy()
   bad_edges=[]
   edgelist=list(Gloc.edges)
   for edge in edgelist:
@@ -80,6 +68,7 @@ def main():
     if (aa+bb==0 and cc*dd>0) or (cc+dd==0 and aa*bb>0) or (aa+cc==0 and bb*dd>0) or (bb+dd==0 and aa*cc>0):
       bad_edges.append(edge)
       remove_allele_edges(Gloc, Gall, edge)
+      remove_allele_edges(Gloc, Gallconf, edge)
       Gloc.remove_edge(edge[0], edge[1])
       Gconf.remove_edge(edge[0], edge[1])
     else:
@@ -88,9 +77,8 @@ def main():
         pass
       else:
         Gconf.remove_edge(edge[0], edge[1])
+        remove_allele_edges(Gloc, Gallconf, edge)
 
-  print('strict locus  graph')
-  print('Memory usage info (Mb):\t'+str(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/usage_denom))
 
   with open(args.edgefile, 'w') as outf, open(args.hapfile, 'w') as outh:
     comp_loose=list(Gloc.subgraph(c).copy() for c in nx.connected_components(Gloc))
@@ -101,30 +89,14 @@ def main():
       gg=list(gg_conf.subgraph(cc).copy() for cc in nx.connected_components(gg_conf))
       for jj in range(len(gg)):
         ggsub1=gg[jj]
-        [h1, h2]=phase_conf_component(ggsub1)
-        print(str(ii)+'\t'+str(jj)+'\t'+str(gg_conf.number_of_nodes())+'\t'+str(ggsub1.number_of_nodes())+'\t'+str(len(h1)))
-      if len(gg)>1:
-        merge_all(gg_conf, ii, Gloc)
-      gg=list(gg_conf.subgraph(cc).copy() for cc in nx.connected_components(gg_conf))
-      if len(gg)>1 and args.strict==False:
-        merge_all(gg_conf, ii, Gloc, strict=False)
-      #list of connected graphs, post-merging
-      gg=list(gg_conf.subgraph(cc).copy() for cc in nx.connected_components(gg_conf))
-      for jj in range(len(gg)):
-        ggsub1=gg[jj]
-        haps=phase_conf_component(ggsub1, strict=False)
-        print(str(ii)+'\t'+str(jj)+'\t'+str(gg_conf.number_of_nodes())+'\t'+str(ggsub1.number_of_nodes())+'\t'+str(len(haps[0])))
-        #subgraphs of allele graph corresponding to allele on each haplotype
+        haps=phase_conf_component(ggsub1)
         for hapid in range(2):
-          Gallsub=Gall.subgraph(haps[hapid]).copy()
+          Gallsub=Gallconf.subgraph(haps[hapid]).copy()
           minforest=nx.minimum_spanning_tree(Gallsub, weight='mean_dist')
           mintree=list(minforest.subgraph(cc).copy() for cc in nx.connected_components(minforest))
           for treeid in range(len(mintree)):
-            treelist=list(mintree[treeid].edges)
-            for tredge in treelist :
-              curedge=mintree[treeid].edges[tredge]
-              edgestr=str(round(curedge['mean_dist'], 3))+';'+str(round(curedge['sd_dist'], 3))+';'+str(curedge['count'])
-              print(str(ii)+'_'+str(jj)+'_'+str(hapid+1)+'_'+str(treeid)+'\t'+edgestr+'\t'+tredge[0]+'\t'+tredge[1], file=outf)
+            for edge in mintree[treeid].edges():
+              print(str(ii)+'_'+str(jj)+'_'+str(hapid+1)+'_'+str(treeid)+'\t'+str(edge[0])+'\t'+str(edge[1]), file=outh)
             terminal_nodes=[]
             for node1 in list(mintree[treeid].nodes):
               if mintree[treeid].degree(node1)==1:
@@ -132,20 +104,8 @@ def main():
             for aa in range(len(terminal_nodes)-1):
               for bb in range(aa+1, len(terminal_nodes)):
                 sp=nx.shortest_path(mintree[treeid], terminal_nodes[aa], terminal_nodes[bb])
-                for nodeii in range(len(sp)):
-                  node1=sp[nodeii]
-                  if nodeii==0:
-                    outstr=str(mintree[treeid].degree(node1))+'\t.'
-                  else:
-                    prevedge=mintree[treeid].edges[sp[nodeii], sp[nodeii-1]]
-                    outstr=str(mintree[treeid].degree(node1))+'\t'+str(prevedge['count'])+'_'+str(prevedge['dist'])+'_'+str(prevedge['dist_sq'])
-                  print(str(ii)+'_'+str(jj)+'_'+str(hapid+1)+'_'+str(treeid)+'\t'+str(aa)+'_'+str(bb)+'\t'+outstr+'\t'+node1, file=outh)
-            
-
-      print('-----------------------------------------------------------------')
-      print('Memory usage info (Mb):\t'+str(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/usage_denom))
-
-
+                for node1 in sp:
+                  print(str(ii)+'_'+str(jj)+'_'+str(hapid+1)+'_'+str(treeid)+'\t'+str(aa)+'_'+str(bb)+'\t'+str(mintree[treeid].degree(node1))+'\t'+node1, file=outf)
 
 def add_locus_node(gg, locus, pos):
   gg.add_node(locus)

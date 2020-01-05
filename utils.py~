@@ -1,0 +1,191 @@
+#!/usr/bin/env python
+
+import gzip
+import networkx as nx
+import re
+from collections import defaultdict
+import math
+import argparse
+import cProfile , pstats , resource
+import sys
+import code
+from collections import Counter
+
+
+def pre_filter_strict_pass(cts, minfrac=0.95):
+  [aa, bb, cc, dd]=cts
+  nn=aa+bb+cc+dd
+  passf=False
+  bal=-1
+  if nn<2:
+    return False
+  elif (aa+dd)*1.0/nn>minfrac:
+    bal=aa*1.0/(aa+dd)
+  elif (bb+cc)*1.0/nn>minfrac:
+    bal=bb*1.0/(bb+cc)
+  if bal>0.1 and bal<0.9:
+    passf=True
+  return passf
+
+def pre_filter_loose_pass(cts, minfrac=0.90):
+  [aa, bb, cc, dd]=cts
+  nn=aa+bb+cc+dd
+  passf=False
+  if nn < 2:
+    return False
+  elif  (aa+dd)*1.0/nn>minfrac or (bb+cc)*1.0/nn>minfrac:
+    passf=True
+  return passf
+
+def odds_ratio(ll):
+  [aa, bb, cc, dd]=ll
+  return 1.0*(aa+1)*(dd+1)/((bb+1)*(cc+1))
+
+def check_edge(edge, gg):
+  oddsratio=odds_ratio(edge[2]['cts'])
+  ph0=gg.nodes[edge[0]]['phased_all']
+  ph1=gg.nodes[edge[1]]['phased_all']
+  if (oddsratio>1 and ph0==ph1) or (oddsratio<1 and ph1!=ph0):
+    return True
+  else:
+    return False
+
+
+def check_phase(ggsub):
+  edgelist=list(ggsub.edges(data=True))
+  error_count=0
+  for ii in range(len(edgelist)):
+    edata=edgelist[ii]
+    if edata[2]['conf']:
+      if not check_edge(edata, ggsub):
+        sys.stderr.write('Error')
+        error_count+=1
+  return error_count
+
+def phase_conf_component_tree(ggsub):
+  tr=nx.minimum_spanning_tree(ggsub, weight='wt')
+  startnode=''
+  for node in tr.nodes:
+    if tr.degree(node)<=1:
+      startnode=node
+      break
+  tr.nodes[startnode]['phased_all']=[0,1]
+  ggsub.nodes[startnode]['phased_all']=[0,1]
+  [h0, h1] = phase_from_node_tree(ggsub, tr, startnode)
+  return([h0, h1])
+
+def phase_from_node_tree(gg1, tree, startnode):
+  hap0=[]
+  hap1=[]
+  hap0.append(get_phased_allele(gg1, startnode, 0))
+  hap1.append(get_phased_allele(gg1, startnode, 1))
+  if len(gg1)>1:
+    bfs=list(nx.bfs_edges(tree, startnode))
+    for ii in range(len(bfs)):
+      edata=gg1.edges[bfs[ii]]
+      [prevnode, curnode]=bfs[ii]
+      if 'phased_all' in gg1.nodes[prevnode]:
+        alleles=gg1.nodes[prevnode]['phased_all']
+        oddsratio=odds_ratio(edata['cts'])
+        if oddsratio>1:
+          gg1.nodes[curnode]['phased_all']=alleles
+        else:
+          gg1.nodes[curnode]['phased_all']=[alleles[1], alleles[0]] 
+        hap0.append(get_phased_allele(gg1, curnode, 0))
+        hap1.append(get_phased_allele(gg1, curnode, 1))
+  return([hap0, hap1])      
+
+def get_phased_allele(gg, node, hap):
+  refalt=gg.nodes[node]['phased_all'][hap]
+  return(str(node)+'_'+str(refalt))
+
+def add_allele_edges(gg, loc1, loc2, cts, mns):
+    [aa, bb, cc, dd]=cts
+    oddsratio=(aa+1.0)*(dd+1.0)/((bb+1.0)*(cc+1.0))
+    nn=sum(cts)
+    if oddsratio>1:
+      if aa>0:
+        gg.add_edge(loc1+'_0', loc2+'_0', ct=aa, mean_dist=mns[0])
+      if dd>0:
+        gg.add_edge(loc1+'_1', loc2+'_1', ct=dd, mean_dist=mns[3])
+    elif oddsratio<1:
+      if bb>0:
+        gg.add_edge(loc1+'_0', loc2+'_1', ct=bb, mean_dist=mns[1])
+      if cc>0:
+        gg.add_edge(loc1+'_1', loc2+'_0', ct=cc, mean_dist=mns[2])
+
+def add_to_supergraph1(superg, comphash, Gconf, infile, id):
+
+  with gzip.open(infile, 'rt') as fp:
+    line=fp.readline().strip()
+    while line:
+      ll=re.split('[\t]', line)
+      cts=tuple(map(int, ll[2:6]))
+      mns=tuple(map(float, ll[6:10]))
+      tot=sum(cts)
+      [loc1, loc2]=ll[0:2]
+      if pre_filter_loose_pass(cts):
+        if loc1 in comphash and loc2 in comphash:
+          [c1, c2]=[comphash[loc1], comphash[loc2]]
+          if c1!=c2:
+            if c2<c1:
+              [loc1, loc2]=[loc2, loc1]
+              [c1, c2]=[c2, c1]
+              cts=(cts[0], cts[2], cts[1], cts[3])
+              mns=(mns[0], mns[2], mns[1], mns[3])
+            [ph1, ph2]=Gconf.nodes[loc1]['phased_all'], Gconf.nodes[loc2]['phased_all']
+            if ph1==[1,0] and ph2==[1,0]:
+              pass
+            elif ph1==[0,1] and ph2==[0,1]:
+              cts=(cts[3], cts[2], cts[1], cts[0])
+              mns=(mns[3], mns[2], mns[1], mns[0])
+            elif ph1==[1,0] and ph2==[0,1]:
+              cts=(cts[1], cts[0], cts[3], cts[2])
+              mns=(mns[1], mns[0], mns[3], mns[2])
+            elif ph1==[0,1] and ph2==[1,0]:
+              cts=(cts[2], cts[3], cts[0], cts[1])
+              mns=(mns[2], mns[3], mns[0], mns[1])
+            dist=max(mns)
+            if not superg.has_edge(c1, c2):
+              superg.add_edge(c1, c2, cts_all={cts : 1}, min_dist={cts : dist}, mns_dict={cts: mns}, min_loc_pairs={cts : [loc1, loc2]}, evtype={cts : id}, pairct=1)
+            else:
+              curedge=superg.edges[c1, c2]
+              curedge['pairct']+=1
+              if not cts in curedge['cts_all']:
+                curedge['cts_all'][cts]=1
+                curedge['min_dist'][cts]=dist
+                curedge['min_loc_pairs'][cts]=[loc1, loc2]
+                curedge['evtype'][cts]=id
+                curedge['mns_dict'][cts]=mns
+              else:
+                curedge['cts_all'][cts]+=1
+                if dist<curedge['min_dist'][cts]:
+                  curedge['min_dist'][cts]=dist
+                  curedge['min_loc_pairs'][cts]=[loc1, loc2]
+                  curedge['evtype'][cts]=id
+                  curedge['mns_dict'][cts]=mns
+      line=fp.readline().strip()
+
+def remove_bridges(GG, min_counts_strict):
+
+  selected_edges = [(u,v) for u,v,e in GG.edges(data=True) if  e['conf'] == True]
+  gg_conf=GG.edge_subgraph(selected_edges)
+  brlist=list(nx.bridges(gg_conf))
+  for edge in brlist:
+    curedge=GG.edges[edge]
+    if sum(curedge['cts'])<min_counts_strict:
+      if abs(curedge['mns'][0]-curedge['mns'][3])>350 or abs(curedge['mns'][1]-curedge['mns'][2])>350:
+        GG.edges[edge].update({'conf': False})
+
+
+def transform(cts, trans=1):
+  
+  if trans==2:
+    cts=(cts[3], cts[2], cts[1], cts[0])
+  elif trans==3:
+    cts=(cts[1], cts[0], cts[3], cts[2])
+  elif trans==4:
+    cts=(cts[2], cts[3], cts[0], cts[1])
+  return cts
+
+

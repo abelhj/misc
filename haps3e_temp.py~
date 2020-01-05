@@ -63,8 +63,8 @@ def main():
     node2=Gall.nodes[edge[1]]
     add_counts_edge(Gloc, node1, node2, Gall.edges[edge]['count'])
 
-  import code
-  code.interact(local=locals())
+  #import code
+  #code.interact(local=locals())
 
 
   print('locus graph')
