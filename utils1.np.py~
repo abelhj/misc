@@ -44,12 +44,12 @@ def pre_filter_strict_pass(cts, minfrac=0.95, tp='het-het'):
       passf=True
   return passf
 
-def pre_filter_loose_pass(cts, minfrac=0.90, tp='het-het'):
+def pre_filter_loose_pass(cts, minfrac=0.90, minct=2, tp='het-het'):
   [aa, bb, cc, dd]=cts
   nn=aa+bb+cc+dd
   passf=False
   thresh=minfrac*nn
-  if nn < 2:
+  if nn < minct:
     return False
   if tp=='het-het':
     if  aa+dd>thresh or bb+cc>thresh:
@@ -375,15 +375,15 @@ def add_edge_to_supergraph1(edge, superg, comphash, sconf):
           ee['mns_dict'][ctstrans]=edge[2]['mns_dict'][cts]
 
 def remove_bridges(GG, min_counts_strict):
-
-  selected_edges = [(u,v) for u,v,e in GG.edges(data=True) if  e['conf'] == True]
-  gg_conf=GG.edge_subgraph(selected_edges)
-  brlist=list(nx.bridges(gg_conf))
+  bridges=[]
+  brlist=list(nx.bridges(GG))
   for edge in brlist:
     curedge=GG.edges[edge]
     if sum(curedge['cts'])<min_counts_strict:
       if abs(curedge['mns'][0]-curedge['mns'][3])>350 or abs(curedge['mns'][1]-curedge['mns'][2])>350:
-        GG.edges[edge].update({'conf': False})
+        bridges.append(curedge)
+        GG.remove_edge(edge[0], edge[1])
+  return bridges
 
 def transform(cts, trans=1):
   
