@@ -12,13 +12,18 @@ import code
 from collections import Counter
 
 
+<<<<<<< HEAD
 def pre_filter_strict_pass(cts, minfrac=0.95, tp='het-het'):
+=======
+def pre_filter_strict_pass(cts, minfrac=0.95):
+>>>>>>> 2a6eb2e7eebf750998ab245ccb957a32c37bd7f0
   [aa, bb, cc, dd]=cts
   nn=aa+bb+cc+dd
   passf=False
   bal=-1
   if nn<2:
     return False
+<<<<<<< HEAD
   thresh=minfrac*nn
   if tp=='het-het':
     if aa+dd>thresh:
@@ -61,6 +66,24 @@ def pre_filter_loose_pass(cts, minfrac=0.90, minct=2, tp='het-het'):
     mm=max(cts)
     if mm>minfrac*nn:
       passf=True
+=======
+  elif (aa+dd)*1.0/nn>minfrac:
+    bal=aa*1.0/(aa+dd)
+  elif (bb+cc)*1.0/nn>minfrac:
+    bal=bb*1.0/(bb+cc)
+  if bal>0.1 and bal<0.9:
+    passf=True
+  return passf
+
+def pre_filter_loose_pass(cts, minfrac=0.90):
+  [aa, bb, cc, dd]=cts
+  nn=aa+bb+cc+dd
+  passf=False
+  if nn < 2:
+    return False
+  elif  (aa+dd)*1.0/nn>minfrac or (bb+cc)*1.0/nn>minfrac:
+    passf=True
+>>>>>>> 2a6eb2e7eebf750998ab245ccb957a32c37bd7f0
   return passf
 
 def odds_ratio(ll):
@@ -76,6 +99,10 @@ def check_edge(edge, gg):
   else:
     return False
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> 2a6eb2e7eebf750998ab245ccb957a32c37bd7f0
 def check_phase(ggsub):
   edgelist=list(ggsub.edges(data=True))
   error_count=0
@@ -87,6 +114,7 @@ def check_phase(ggsub):
         error_count+=1
   return error_count
 
+<<<<<<< HEAD
 
 def check_phase1(ggsub):
   edgelist=list(ggsub.edges(data=True))
@@ -101,6 +129,8 @@ def check_phase1(ggsub):
         bad_edges.append(edata)
   return bad_edges
 
+=======
+>>>>>>> 2a6eb2e7eebf750998ab245ccb957a32c37bd7f0
 def phase_conf_component_tree(ggsub):
   tr=nx.minimum_spanning_tree(ggsub, weight='wt')
   startnode=''
@@ -113,6 +143,7 @@ def phase_conf_component_tree(ggsub):
   [h0, h1] = phase_from_node_tree(ggsub, tr, startnode)
   return([h0, h1])
 
+<<<<<<< HEAD
 
 def phase_conf_component_tree2(ggsub):
   tr=nx.minimum_spanning_tree(ggsub, weight='wt')
@@ -126,6 +157,8 @@ def phase_conf_component_tree2(ggsub):
   [h0, h1] = phase_from_node_tree(ggsub, tr, startnode)
   return([h0, h1], tr, startnode)
 
+=======
+>>>>>>> 2a6eb2e7eebf750998ab245ccb957a32c37bd7f0
 def phase_from_node_tree(gg1, tree, startnode):
   hap0=[]
   hap1=[]
@@ -174,6 +207,7 @@ def add_to_supergraph1(superg, comphash, Gconf, infile, id):
       ll=re.split('[\t]', line)
       cts=tuple(map(int, ll[2:6]))
       mns=tuple(map(float, ll[6:10]))
+<<<<<<< HEAD
       locs=list(map(str, ll[0:2]))
       if pre_filter_loose_pass(cts):
         add_edge_to_supergraph(superg, locs, cts, mns, comphash, Gconf)
@@ -337,6 +371,74 @@ def add_edge_to_supergraph(superg, locs, cts, mns, comphash, Gconf):
         curedge['min_loc_pairs'][cts]=[loc1, loc2]
         curedge['evtype'][cts]=id
         curedge['mns_dict'][cts]=mns
+=======
+      tot=sum(cts)
+      [loc1, loc2]=ll[0:2]
+      if pre_filter_loose_pass(cts):
+        if loc1 in comphash and loc2 in comphash:
+          [c1, c2]=[comphash[loc1], comphash[loc2]]
+          if c1!=c2:
+            if c2<c1:
+              [loc1, loc2]=[loc2, loc1]
+              [c1, c2]=[c2, c1]
+              cts=(cts[0], cts[2], cts[1], cts[3])
+              mns=(mns[0], mns[2], mns[1], mns[3])
+            [ph1, ph2]=Gconf.nodes[loc1]['phased_all'], Gconf.nodes[loc2]['phased_all']
+            if ph1==[1,0] and ph2==[1,0]:
+              pass
+            elif ph1==[0,1] and ph2==[0,1]:
+              cts=(cts[3], cts[2], cts[1], cts[0])
+              mns=(mns[3], mns[2], mns[1], mns[0])
+            elif ph1==[1,0] and ph2==[0,1]:
+              cts=(cts[1], cts[0], cts[3], cts[2])
+              mns=(mns[1], mns[0], mns[3], mns[2])
+            elif ph1==[0,1] and ph2==[1,0]:
+              cts=(cts[2], cts[3], cts[0], cts[1])
+              mns=(mns[2], mns[3], mns[0], mns[1])
+            dist=max(mns)
+            if not superg.has_edge(c1, c2):
+              superg.add_edge(c1, c2, cts_all={cts : 1}, min_dist={cts : dist}, mns_dict={cts: mns}, min_loc_pairs={cts : [loc1, loc2]}, evtype={cts : id}, pairct=1)
+            else:
+              curedge=superg.edges[c1, c2]
+              curedge['pairct']+=1
+              if not cts in curedge['cts_all']:
+                curedge['cts_all'][cts]=1
+                curedge['min_dist'][cts]=dist
+                curedge['min_loc_pairs'][cts]=[loc1, loc2]
+                curedge['evtype'][cts]=id
+                curedge['mns_dict'][cts]=mns
+              else:
+                curedge['cts_all'][cts]+=1
+                if dist<curedge['min_dist'][cts]:
+                  curedge['min_dist'][cts]=dist
+                  curedge['min_loc_pairs'][cts]=[loc1, loc2]
+                  curedge['evtype'][cts]=id
+                  curedge['mns_dict'][cts]=mns
+      line=fp.readline().strip()
+
+def remove_bridges(GG, min_counts_strict):
+
+  selected_edges = [(u,v) for u,v,e in GG.edges(data=True) if  e['conf'] == True]
+  gg_conf=GG.edge_subgraph(selected_edges)
+  brlist=list(nx.bridges(gg_conf))
+  for edge in brlist:
+    curedge=GG.edges[edge]
+    if sum(curedge['cts'])<min_counts_strict:
+      if abs(curedge['mns'][0]-curedge['mns'][3])>350 or abs(curedge['mns'][1]-curedge['mns'][2])>350:
+        GG.edges[edge].update({'conf': False})
+
+
+def transform(cts, trans=1):
+  
+  if trans==2:
+    cts=(cts[3], cts[2], cts[1], cts[0])
+  elif trans==3:
+    cts=(cts[1], cts[0], cts[3], cts[2])
+  elif trans==4:
+    cts=(cts[2], cts[3], cts[0], cts[1])
+  return cts
+
+>>>>>>> 2a6eb2e7eebf750998ab245ccb957a32c37bd7f0
 
 def add_edge_to_supergraph1(edge, superg, comphash, sconf):
 
@@ -356,9 +458,16 @@ def add_edge_to_supergraph1(edge, superg, comphash, sconf):
     else:
       trans=4
     if not superg.has_edge(c1, c2):
+<<<<<<< HEAD
       superg.add_edge(c1, c2, pairct=0, cts_all={}, min_dist={}, min_loc_pairs={}, evtype={})
     ee=superg.edges[c1, c2]
     ee['pairct']+=edge[2]['pairct']
+=======
+      superg.add_edge(c1, c2, pairct=edge[2]['pairct'], cts_all={}, min_dist={}, min_loc_pairs={}, evtype={})
+    else:
+      superg.edges[c1, c2]['pairct']+=edge[2]['pairct']
+    ee=superg.edges[c1, c2]
+>>>>>>> 2a6eb2e7eebf750998ab245ccb957a32c37bd7f0
     for cts in edge[2]['cts_all'].keys():
       ctstrans=transform(cts, trans)
       if not ctstrans in ee['cts_all']:
@@ -366,12 +475,16 @@ def add_edge_to_supergraph1(edge, superg, comphash, sconf):
         ee['min_dist'][ctstrans]=edge[2]['min_dist'][cts]
         ee['min_loc_pairs'][ctstrans]=edge[2]['min_loc_pairs'][cts]
         ee['evtype'][ctstrans]=edge[2]['evtype'][cts]
+<<<<<<< HEAD
         ee['mns_dict'][ctstrans]=edge[2]['mns_dict'][cts]
+=======
+>>>>>>> 2a6eb2e7eebf750998ab245ccb957a32c37bd7f0
       else:
         ee['cts_all'][ctstrans]=ee['cts_all'][ctstrans]+edge[2]['cts_all'][cts]
         if edge[2]['min_dist'][cts]<ee['min_dist'][ctstrans]:
           ee['min_dist'][ctstrans]=edge[2]['min_dist'][cts]
           ee['min_loc_pairs'][ctstrans]=edge[2]['min_loc_pairs'][cts]
+<<<<<<< HEAD
           ee['mns_dict'][ctstrans]=edge[2]['mns_dict'][cts]
 
 def remove_bridges(GG, min_counts_strict):
@@ -394,6 +507,9 @@ def transform(cts, trans=1):
   elif trans==4:
     cts=(cts[2], cts[3], cts[0], cts[1])
   return cts
+=======
+
+>>>>>>> 2a6eb2e7eebf750998ab245ccb957a32c37bd7f0
 
 def score_edge(edge, min_frac=0.95):
   [inner, outer, tot, maxct_inner, maxct_outer, maxa, maxb, maxc, maxd, aa, bb, cc, dd]=[0,0,0,0,0,0,0,0,0,0,0,0,0]
