@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
 import networkx as nx
-import numpy as np
 import re, math, argparse, gzip
 import cProfile, pstats, resource
 import sys, code, pickle
