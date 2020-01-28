@@ -24,7 +24,7 @@ def main():
   min_counts_strict=5
   cp = cProfile.Profile()
   cp.enable()
-  usage_denom=1024
+  usage_denom=1024*1024
   Gloc=nx.Graph()
   Ghom=nx.Graph()
 
@@ -59,10 +59,7 @@ def main():
           mns=[mns[0], mns[2], mns[1], mns[3]]
         [passf, orient, nn, dist]=pre_filter_strict_pass(cts, mns, 0.95, tp)
         if passf:
-          Ghom.add_edge(loc1, loc2,  conf=True, cts=cts, mns=mns, wt=nn, orient=orient, dist=dist)
-        else:
-          Ghom.add_node(loc1)
-          Ghom.add_node(loc2)
+          Ghom.add_edge(loc1, loc2, orient=orient, dist=int(dist))
       line=fp.readline().strip()
       ct+=1
 
@@ -76,18 +73,6 @@ def main():
     comp2treehom[ii]=tr
     for node in tr.nodes():
       loc2comphom[node]=ii
-
-  Ghom=None
-  gg=list(Gloc.subgraph(cc) for cc in sorted(nx.connected_components(Gloc), key=len, reverse=True))
-  for ii in range(len(gg)):
-    print(str(ii)+'\t'+str(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/usage_denom/usage_denom))
-    if gg[ii].number_of_nodes()>2:
-      tr=nx.minimum_spanning_tree(gg[ii], weight='dist')
-    else:
-      tr=gg[ii]
-    comp2tree[ii]=tr
-    for node in tr.nodes():
-      loc2comp[node]=ii
 
   ll=[loc2comphom, comp2treehom]
   with open(args.temp_prefix+'.hom.p', 'wb') as f:

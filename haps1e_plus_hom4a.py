@@ -177,7 +177,11 @@ def main():
         print(str1, file=outb)
 
   #code.interact(local=locals())
-
+  for node in superg.nodes():
+    deg=superg.degree(node)
+    [tp, id]=re.split('_', node)
+    if tp=='hom':
+      print(node+'\t'+str(deg))
 
 
 
