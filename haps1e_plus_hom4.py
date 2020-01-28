@@ -6,7 +6,7 @@ import re, math, argparse, gzip
 import cProfile, pstats, resource
 import sys, code, pickle
 from collections import Counter, defaultdict
-from utils1 import *
+from utils2 import *
 
                                         
 def main():
@@ -42,66 +42,32 @@ def main():
       if ct%1000==0:
         sys.stderr.write(str(ct)+'\t'+str(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/usage_denom)+'\n')
       ll=re.split('[\t]', line)
-      cts=list(map(int, ll[2:6]))
-      mns=list(map(float, ll[6:10]))
-      tot=sum(cts)
-      [loc1, loc2]=ll[0:2]
-      tp='het-hom'
-      if loc1 in homvar and loc2 in homvar:
-        tp='hom-hom'
-      elif not (loc1 in homvar or loc2 in homvar):
+      [loc1, loc2]=ll[0:2]      
+      if not (loc1 in homvar or loc2 in homvar):
         tp='het-het'
-      if loc2<loc1:
-        [loc1, loc2]=[loc2, loc1]
-        cts=[cts[0], cts[2], cts[1], cts[3]]
-        mns=[mns[0], mns[2], mns[1], mns[3]]
-      conf=False
-      if pre_filter_loose_pass(cts, 0.90, 1, tp):
-        if tp=='het-hom':
-          print(line, file=fmix)
-        if pre_filter_strict_pass(cts, 0.95, tp):
-          conf=True
-          if tp=='het-het':
-            Gloc.add_edge(loc1, loc2,  conf=conf, cts=cts, mns=mns, wt=tot)
-          elif tp=='hom-hom':
-            Ghom.add_edge(loc1, loc2,  conf=conf, cts=cts, mns=mns, wt=tot)
+        print(line, file=fhet)
+      elif not (loc1 in homvar and loc2 in homvar):
+        tp='het-hom'
+        print(line, file=fmix)
+      else:
+        tp='hom-hom'
+        cts=list(map(int, ll[2:6]))
+        mns=list(map(float, ll[6:10]))
+        if loc2<loc1:
+          [loc1, loc2]=[loc2, loc1]
+          cts=[cts[0], cts[2], cts[1], cts[3]]
+          mns=[mns[0], mns[2], mns[1], mns[3]]
+        [passf, orient, nn, dist]=pre_filter_strict_pass(cts, mns, 0.95, tp)
+        if passf:
+          Ghom.add_edge(loc1, loc2,  conf=True, cts=cts, mns=mns, wt=nn, orient=orient, dist=dist)
         else:
-          if tp=='het-het':
-            print(line, file=fhet)
-            Gloc.add_node(loc1)
-            Gloc.add_node(loc2)
-          if tp=='het-hom':
-            if loc1 in homvar:
-              Gloc.add_node(loc2)
-            else:
-              Gloc.add_node(loc1)
+          Ghom.add_node(loc1)
+          Ghom.add_node(loc2)
       line=fp.readline().strip()
       ct+=1
-   
-  for edge in Ghom.edges(data=True):
-    nn=sum(edge[2]['cts'])
-    for ii in range(4):
-      if edge[2]['cts'][ii]>0.9*nn:
-        edge[2]['dist']=edge[2]['mns'][ii]
 
-  for edge in Gloc.edges(data=True):
-    nn=sum(edge[2]['cts'])
-    if edge[2]['cts'][0]+edge[2]['cts'][3]>0.8*nn:
-      edge[2]['orient']='outer'
-      edge[2]['dist']=0.5*(edge[2]['mns'][0]+edge[2]['mns'][3])
-    if edge[2]['cts'][1]+edge[2]['cts'][2]>0.8*nn:
-      edge[2]['orient']='inner'
-      edge[2]['dist']=0.5*(edge[2]['mns'][1]+edge[2]['mns'][2])
-
-  het_bridges=remove_bridges(Gloc, min_counts_strict)
   hom_bridges=remove_bridges(Ghom, min_counts_strict)
-  loc2comphom={}; comp2treehom={}; loc2comp={}; comp2tree={}
-
-  cp.disable()
-  cp.print_stats()
-
-
-  sys.exit(1)
+  loc2comphom={}; comp2treehom={};
 
   gg=list(Ghom.subgraph(cc) for cc in sorted(nx.connected_components(Ghom), key=len, reverse=True))
   for ii in range(len(gg)):
@@ -123,193 +89,242 @@ def main():
     for node in tr.nodes():
       loc2comp[node]=ii
 
-  with gzip.open(args.bedfile+'hom.bed.gz', 'wt') as outb:
-    for comp in comp2treehom.keys():
-      id='hom_'+str(comp)
-      mintree=comp2treehom[comp]
-      str=comp2bed(mintree.nodes, id)
-      print(str, file=outb)
-      nodes=[int(re.split('[:_]', node)[1]) for node in mintree.nodes if not 'ctg' in node]
-      chrs=[re.split('[:_]', node)[0] for node in mintree.nodes if not 'ctg' in node]
-      chr=Counter(chrs).most_common(1)[0][0]
-      nodes.sort()
-      dists=[]; ones=[]
-      for kk in range(len(nodes)):
-        dists.append(nodes[kk]-nodes[0]+1)
-        ones.append(1)
-        dstr=','.join(map(str, dists))
-        onestr=','.join(map(str,ones))
-      print(chr+'\t'+str(nodes[0])+'\t'+str(max(nodes))+'\t'+id+'\t100\t.\t'+str(nodes[0])+'\t'+str(max(nodes))+'\t150,150,0\t'+str(len(dists))+'\t'+onestr+'\t'+dstr, file=outb)
-
-  with gzip.open(args.bedfile+'het.bed.gz', 'wt') as outb:
-    for comp in comp2tree.keys(): 
-      id='het_'+str(comp)
-      print(id)
-      mintree=comp2tree[comp]
-      str=comp2bed(mintree.nodes, id)
-      print(str, file=outb)
-      nodes=[int(re.split('[:_]', node)[1]) for node in mintree.nodes if not 'ctg' in node]
-      if len(nodes)>0:
-        chrs=[re.split('[:_]', node)[0] for node in mintree.nodes if not 'ctg' in node]
-        chr=Counter(chrs).most_common(1)[0][0]
-        nodes.sort()
-        dists=[]
-        ones=[]
-        for kk in range(len(nodes)):
-          dists.append(nodes[kk]-nodes[0]+1)
-          ones.append(1)
-          dstr=','.join(map(str, dists))
-          onestr=','.join(map(str,ones))
-        print(chr+'\t'+str(nodes[0])+'\t'+str(max(nodes))+'\t'+id+'\t100\t.\t'+str(nodes[0])+'\t'+str(max(nodes))+'\t0,150,0\t'+str(len(dists))+'\t'+onestr+'\t'+dstr, file=outb)
-
-  ll=[loc2comp, comp2tree, loc2comphom, comp2treehom]
-  with open("../hom.p", 'wb') as f:
+  ll=[loc2comphom, comp2treehom]
+  with open(args.temp_prefix+'.hom.p', 'wb') as f:
     pickle.dump(ll, f)
 
-  Gmix=nx.Graph(); superg=nx.Graph()
-
-  with gzip.open(args.temp_prefix+'.mixed.txt.gz', 'rt') as fp:
-    line=fp.readline().strip()
-    ct=0
-    while line:
-      if ct%1000==0:
-        sys.stderr.write(str(ct)+'\t'+str(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/usage_denom)+'\n')
-      ll=re.split('[\t]', line); cts=list(map(int, ll[2:6])); mns=list(map(float, ll[6:10]))
-      tot=sum(cts); [loc1, loc2]=ll[0:2] 
-      if (loc1 in homvar and loc2 not in homvar) or (loc2 in homvar and loc1 not in homvar):
-        tp='het-hom'
-        if pre_filter_strict_pass(cts, 0.95, tp):
-          conf=True
-          if not loc2 in homvar :
-            [loc1, loc2]=[loc2, loc1]; cts=[cts[0], cts[2], cts[1], cts[3]]; mns=[mns[0], mns[2], mns[1], mns[3]]
-          if loc1 in loc2comp and loc2 in loc2comphom:
-            num=0; denom=0
-            for ii in range(4):
-              if cts[ii]>0:
-                num+=mns[ii]
-                denom+=1
-            mn_dist=1.0*num/denom
-            Gmix.add_edge(loc1, loc2,  conf=conf, cts=cts, mns=mns, dist=mn_dist, wt=tot)
-            hetcomp=loc2comp[loc1]; homcomp=loc2comphom[loc2];
-            node1='het_'+str(hetcomp); node2='hom_'+str(homcomp)
-            if not superg.has_edge(node1, node2):
-              superg.add_edge(node1, node2, dist=[], wt=0, ct=0, sum_dist=0)
-            superg.edges[node1, node2]['wt']+=tot
-            superg.edges[node1, node2]['dist'].append(mn_dist)
-            superg.edges[node1, node2]['ct']+=1
-            superg.edges[node1, node2]['sum_dist']+=mn_dist
-      line=fp.readline().strip()
-      ct+=1
-
-  gg=list(superg.subgraph(cc) for cc in sorted(nx.connected_components(superg), key=len, reverse=True))
-
-  supercomp2tree={}
-  with gzip.open(args.bedfile+'.mixed.bed.gz', 'wt') as outb:
-    for ii in range(len(gg)):
-      id='mixed_'+str(ii)
-      tocomp=[]
-      for node in gg[ii].nodes():
-        [tp, id]=re.split('_', node)
-        if tp=='het':
-          tr=comp2tree[int(id)]
-        else:
-          tr=comp2treehom[int(id)]
-        for node in tr.nodes():
-          tr.nodes[node]['tp']=tp
-        tocomp.append(tr)
-      Gcomp=nx.compose_all(tocomp)
-      Gsub=Gmix.subgraph(Gcomp.nodes())
-      Gcomp1=nx.compose(Gsub, Gcomp)
-      mintree=nx.minimum_spanning_tree(Gcomp1, weight='dist')
-      supercomp2tree[ii]=mintree
-      nodes=[int(re.split('[:_]', node)[1]) for node in mintree.nodes if not 'ctg' in node]
-      chrs=[re.split('[:_]', node)[0] for node in mintree.nodes if not 'ctg' in node]
-      chr=Counter(chrs).most_common(1)[0][0]
-      nodes.sort()
-      dists=[]; ones=[]
-      for kk in range(len(nodes)):
-        dists.append(nodes[kk]-nodes[0]+1)
-        ones.append(1)
-      dstr=','.join(map(str, dists))
-      onestr=','.join(map(str,ones))
-      print(chr+'\t'+str(nodes[0])+'\t'+str(max(nodes))+'\t'+id+'\t100\t.\t'+str(nodes[0])+'\t'+str(max(nodes))+'\t150,150,0\t'+str(len(dists))+'\t'+onestr+'\t'+dstr, file=outb)
-
-  comp2supercomp={}
-  for ii in range(len(gg)):
-    for node in gg[ii].nodes():
-      comp2supercomp[node]=ii
-
-  Gloose=nx.Graph()
-  with gzip.open(args.temp_prefix+'.het.txt.gz', 'rt') as fp:
-    line=fp.readline().strip()
-    ct=0
-    while line:
-      if ct%1000==0:
-        sys.stderr.write(str(ct)+'\t'+str(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/usage_denom)+'\n')
-      ll=re.split('[\t]', line)
-      cts=list(map(int, ll[2:6])); mns=list(map(float, ll[6:10]))
-      tot=sum(cts)
-      [loc1, loc2]=ll[0:2]
-      if not (loc1 in homvar or loc2 in homvar):
-        tp='het-het'
-        if loc2<loc1:
-          [loc1, loc2]=[loc2, loc1]
-          cts=[cts[0], cts[2], cts[1], cts[3]]; mns=[mns[0], mns[2], mns[1], mns[3]]
-        conf=False
-        if pre_filter_loose_pass(cts, 0.90, 2, tp):
-          Gloose.add_edge(loc1, loc2,  conf=conf, cts=cts, mns=mns, wt=tot)
-      line=fp.readline().strip()
-      ct+=1
-
-  for edge in Gloose.edges(data=True):
-    if edge[0] in loc2comp and edge[1] in loc2comp and not loc2comp[edge[0]]==loc2comp[edge[1]]:
-      [comp0, comp1]=['het_'+str(loc2comp[edge[0]]), 'het_'+str(loc2comp[edge[1]])]
-      if comp0 in comp2supercomp and comp1 in comp2supercomp:
-        [s0, s1]=[comp2supercomp[comp0], comp2supercomp[comp1]]
-        if s0==s1 and edge[2]['wt']>1:
-          spl=nx.shortest_path_length(supercomp2tree[s0], source=edge[0], target=edge[1], weight='dist')
-          numer=0; denom=0
-          for ii in range(4):
-            if edge[2]['cts'][ii]>0:
-              numer+=edge[2]['mns'][ii]
-              denom+=1
-          edge[2]['dist']=1.0*numer/denom
-          if abs(edge[2]['dist']-spl)<1000:
-            Gloc.add_edge(edge[0], edge[1], cts=edge[2]['cts'], mns=edge[2]['mns'], dist=edge[2]['dist'], wt=edge[2]['wt'])
-
-  comp2tree={}; loc2comp={}
-  gg=list(Gloc.subgraph(cc) for cc in sorted(nx.connected_components(Gloc), key=len, reverse=True))
-  for ii in range(len(gg)):
-    print(str(ii)+'\t'+str(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/usage_denom/usage_denom))
-    if gg[ii].number_of_nodes()>2:
-      tr=nx.minimum_spanning_tree(gg[ii], weight='dist')
-    else:
-      tr=gg[ii]
-    comp2tree[ii]=tr
-    for node in tr.nodes():
-      loc2comp[node]=ii
-
-  with gzip.open(args.bedfile+'het.1.bed.gz', 'wt') as outb:
-    for comp in comp2tree.keys(): 
-      id='het_'+str(comp)
-      print(id)
-      mintree=comp2tree[comp]
-      nodes=[int(re.split('[:_]', node)[1]) for node in mintree.nodes if not 'ctg' in node]
-      if len(nodes)>0:
-        chrs=[re.split('[:_]', node)[0] for node in mintree.nodes if not 'ctg' in node]
-        chr=Counter(chrs).most_common(1)[0][0]
-        nodes.sort()
-        dists=[]
-        ones=[]
-        for kk in range(len(nodes)):
-          dists.append(nodes[kk]-nodes[0]+1)
-          ones.append(1)
-          dstr=','.join(map(str, dists))
-          onestr=','.join(map(str,ones))
-        print(chr+'\t'+str(nodes[0])+'\t'+str(max(nodes))+'\t'+id+'\t100\t.\t'+str(nodes[0])+'\t'+str(max(nodes))+'\t0,150,0\t'+str(len(dists))+'\t'+onestr+'\t'+dstr, file=outb)
-
-  code.interact(local=locals())  
-            #supercomp2tree[s0].add_edge(edge[0], edge[1], cts=edge[2]['cts'], mns=edge[2]['mns'], dist=edge[2]['dist'], wt=edge[2]['wt'])
+  sys.exit(1)
+#  with gzip.open(args.bedfile+'hom.bed.gz', 'wt') as outb:
+#    for comp in comp2treehom.keys():
+#      id='hom_'+str(comp)
+#      mintree=comp2treehom[comp]
+#      str=comp2bed(mintree.nodes, id)
+#      print(str, file=outb)
+#      nodes=[int(re.split('[:_]', node)[1]) for node in mintree.nodes if not 'ctg' in node]
+#      chrs=[re.split('[:_]', node)[0] for node in mintree.nodes if not 'ctg' in node]
+#      chr=Counter(chrs).most_common(1)[0][0]
+#      nodes.sort()
+#      dists=[]; ones=[]
+#      for kk in range(len(nodes)):
+#        dists.append(nodes[kk]-nodes[0]+1)
+#        ones.append(1)
+#        dstr=','.join(map(str, dists))
+#        onestr=','.join(map(str,ones))
+#      print(chr+'\t'+str(nodes[0])+'\t'+str(max(nodes))+'\t'+id+'\t100\t.\t'+str(nodes[0])+'\t'+str(max(nodes))+'\t150,150,0\t'+str(len(dists))+'\t'+onestr+'\t'+dstr, file=outb)
+#
+#
+#
+#  for edge in Ghom.edges(data=True):
+#    nn=sum(edge[2]['cts'])
+#    for ii in range(4):
+#      if edge[2]['cts'][ii]>0.9*nn:
+#        edge[2]['dist']=edge[2]['mns'][ii]
+#
+#
+#      conf=False
+#      if pre_filter_loose_pass(cts, 0.90, 1, tp):
+#        if tp=='het-hom':
+#          print(line, file=fmix)
+#        if pre_filter_strict_pass(cts, 0.95, tp):
+#          conf=True
+#          if tp=='het-het':
+#            Gloc.add_edge(loc1, loc2,  conf=conf, cts=cts, mns=mns, wt=tot)
+#          elif tp=='hom-hom':
+#            Ghom.add_edge(loc1, loc2,  conf=conf, cts=cts, mns=mns, wt=tot)
+#        else:
+#          if tp=='het-het':
+#            print(line, file=fhet)
+#            Gloc.add_node(loc1)
+#            Gloc.add_node(loc2)
+#          if tp=='het-hom':
+#            if loc1 in homvar:
+#              Gloc.add_node(loc2)
+#            else:
+#              Gloc.add_node(loc1)
+#
+#   
+#
+#
+#  for edge in Gloc.edges(data=True):
+#    nn=sum(edge[2]['cts'])
+#    if edge[2]['cts'][0]+edge[2]['cts'][3]>0.8*nn:
+#      edge[2]['orient']='outer'
+#      edge[2]['dist']=0.5*(edge[2]['mns'][0]+edge[2]['mns'][3])
+#    if edge[2]['cts'][1]+edge[2]['cts'][2]>0.8*nn:
+#      edge[2]['orient']='inner'
+#      edge[2]['dist']=0.5*(edge[2]['mns'][1]+edge[2]['mns'][2])
+#
+#  het_bridges=remove_bridges(Gloc, min_counts_strict)
+#
+#
+#  with gzip.open(args.bedfile+'het.bed.gz', 'wt') as outb:
+#    for comp in comp2tree.keys(): 
+#      id='het_'+str(comp)
+#      print(id)
+#      mintree=comp2tree[comp]
+#      str=comp2bed(mintree.nodes, id)
+#      print(str, file=outb)
+#      nodes=[int(re.split('[:_]', node)[1]) for node in mintree.nodes if not 'ctg' in node]
+#      if len(nodes)>0:
+#        chrs=[re.split('[:_]', node)[0] for node in mintree.nodes if not 'ctg' in node]
+#        chr=Counter(chrs).most_common(1)[0][0]
+#        nodes.sort()
+#        dists=[]
+#        ones=[]
+#        for kk in range(len(nodes)):
+#          dists.append(nodes[kk]-nodes[0]+1)
+#          ones.append(1)
+#          dstr=','.join(map(str, dists))
+#          onestr=','.join(map(str,ones))
+#        print(chr+'\t'+str(nodes[0])+'\t'+str(max(nodes))+'\t'+id+'\t100\t.\t'+str(nodes[0])+'\t'+str(max(nodes))+'\t0,150,0\t'+str(len(dists))+'\t'+onestr+'\t'+dstr, file=outb)
+#
+#  ll=[loc2comp, comp2tree, loc2comphom, comp2treehom]
+#
+#
+#  Gmix=nx.Graph(); superg=nx.Graph()
+#
+#  with gzip.open(args.temp_prefix+'.mixed.txt.gz', 'rt') as fp:
+#    line=fp.readline().strip()
+#    ct=0
+#    while line:
+#      if ct%1000==0:
+#        sys.stderr.write(str(ct)+'\t'+str(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/usage_denom)+'\n')
+#      ll=re.split('[\t]', line); cts=list(map(int, ll[2:6])); mns=list(map(float, ll[6:10]))
+#      tot=sum(cts); [loc1, loc2]=ll[0:2] 
+#      if (loc1 in homvar and loc2 not in homvar) or (loc2 in homvar and loc1 not in homvar):
+#        tp='het-hom'
+#        if pre_filter_strict_pass(cts, 0.95, tp):
+#          conf=True
+#          if not loc2 in homvar :
+#            [loc1, loc2]=[loc2, loc1]; cts=[cts[0], cts[2], cts[1], cts[3]]; mns=[mns[0], mns[2], mns[1], mns[3]]
+#          if loc1 in loc2comp and loc2 in loc2comphom:
+#            num=0; denom=0
+#            for ii in range(4):
+#              if cts[ii]>0:
+#                num+=mns[ii]
+#                denom+=1
+#            mn_dist=1.0*num/denom
+#            Gmix.add_edge(loc1, loc2,  conf=conf, cts=cts, mns=mns, dist=mn_dist, wt=tot)
+#            hetcomp=loc2comp[loc1]; homcomp=loc2comphom[loc2];
+#            node1='het_'+str(hetcomp); node2='hom_'+str(homcomp)
+#            if not superg.has_edge(node1, node2):
+#              superg.add_edge(node1, node2, dist=[], wt=0, ct=0, sum_dist=0)
+#            superg.edges[node1, node2]['wt']+=tot
+#            superg.edges[node1, node2]['dist'].append(mn_dist)
+#            superg.edges[node1, node2]['ct']+=1
+#            superg.edges[node1, node2]['sum_dist']+=mn_dist
+#      line=fp.readline().strip()
+#      ct+=1
+#
+#  gg=list(superg.subgraph(cc) for cc in sorted(nx.connected_components(superg), key=len, reverse=True))
+#
+#  supercomp2tree={}
+#  with gzip.open(args.bedfile+'.mixed.bed.gz', 'wt') as outb:
+#    for ii in range(len(gg)):
+#      id='mixed_'+str(ii)
+#      tocomp=[]
+#      for node in gg[ii].nodes():
+#        [tp, id]=re.split('_', node)
+#        if tp=='het':
+#          tr=comp2tree[int(id)]
+#        else:
+#          tr=comp2treehom[int(id)]
+#        for node in tr.nodes():
+#          tr.nodes[node]['tp']=tp
+#        tocomp.append(tr)
+#      Gcomp=nx.compose_all(tocomp)
+#      Gsub=Gmix.subgraph(Gcomp.nodes())
+#      Gcomp1=nx.compose(Gsub, Gcomp)
+#      mintree=nx.minimum_spanning_tree(Gcomp1, weight='dist')
+#      supercomp2tree[ii]=mintree
+#      nodes=[int(re.split('[:_]', node)[1]) for node in mintree.nodes if not 'ctg' in node]
+#      chrs=[re.split('[:_]', node)[0] for node in mintree.nodes if not 'ctg' in node]
+#      chr=Counter(chrs).most_common(1)[0][0]
+#      nodes.sort()
+#      dists=[]; ones=[]
+#      for kk in range(len(nodes)):
+#        dists.append(nodes[kk]-nodes[0]+1)
+#        ones.append(1)
+#      dstr=','.join(map(str, dists))
+#      onestr=','.join(map(str,ones))
+#      print(chr+'\t'+str(nodes[0])+'\t'+str(max(nodes))+'\t'+id+'\t100\t.\t'+str(nodes[0])+'\t'+str(max(nodes))+'\t150,150,0\t'+str(len(dists))+'\t'+onestr+'\t'+dstr, file=outb)
+#
+#  comp2supercomp={}
+#  for ii in range(len(gg)):
+#    for node in gg[ii].nodes():
+#      comp2supercomp[node]=ii
+#
+#  Gloose=nx.Graph()
+#  with gzip.open(args.temp_prefix+'.het.txt.gz', 'rt') as fp:
+#    line=fp.readline().strip()
+#    ct=0
+#    while line:
+#      if ct%1000==0:
+#        sys.stderr.write(str(ct)+'\t'+str(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/usage_denom)+'\n')
+#      ll=re.split('[\t]', line)
+#      cts=list(map(int, ll[2:6])); mns=list(map(float, ll[6:10]))
+#      tot=sum(cts)
+#      [loc1, loc2]=ll[0:2]
+#      if not (loc1 in homvar or loc2 in homvar):
+#        tp='het-het'
+#        if loc2<loc1:
+#          [loc1, loc2]=[loc2, loc1]
+#          cts=[cts[0], cts[2], cts[1], cts[3]]; mns=[mns[0], mns[2], mns[1], mns[3]]
+#        conf=False
+#        if pre_filter_loose_pass(cts, 0.90, 2, tp):
+#          Gloose.add_edge(loc1, loc2,  conf=conf, cts=cts, mns=mns, wt=tot)
+#      line=fp.readline().strip()
+#      ct+=1
+#
+#  for edge in Gloose.edges(data=True):
+#    if edge[0] in loc2comp and edge[1] in loc2comp and not loc2comp[edge[0]]==loc2comp[edge[1]]:
+#      [comp0, comp1]=['het_'+str(loc2comp[edge[0]]), 'het_'+str(loc2comp[edge[1]])]
+#      if comp0 in comp2supercomp and comp1 in comp2supercomp:
+#        [s0, s1]=[comp2supercomp[comp0], comp2supercomp[comp1]]
+#        if s0==s1 and edge[2]['wt']>1:
+#          spl=nx.shortest_path_length(supercomp2tree[s0], source=edge[0], target=edge[1], weight='dist')
+#          numer=0; denom=0
+#          for ii in range(4):
+#            if edge[2]['cts'][ii]>0:
+#              numer+=edge[2]['mns'][ii]
+#              denom+=1
+#          edge[2]['dist']=1.0*numer/denom
+#          if abs(edge[2]['dist']-spl)<1000:
+#            Gloc.add_edge(edge[0], edge[1], cts=edge[2]['cts'], mns=edge[2]['mns'], dist=edge[2]['dist'], wt=edge[2]['wt'])
+#
+#  comp2tree={}; loc2comp={}
+#  gg=list(Gloc.subgraph(cc) for cc in sorted(nx.connected_components(Gloc), key=len, reverse=True))
+#  for ii in range(len(gg)):
+#    print(str(ii)+'\t'+str(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/usage_denom/usage_denom))
+#    if gg[ii].number_of_nodes()>2:
+#      tr=nx.minimum_spanning_tree(gg[ii], weight='dist')
+#    else:
+#      tr=gg[ii]
+#    comp2tree[ii]=tr
+#    for node in tr.nodes():
+#      loc2comp[node]=ii
+#
+#  with gzip.open(args.bedfile+'het.1.bed.gz', 'wt') as outb:
+#    for comp in comp2tree.keys(): 
+#      id='het_'+str(comp)
+#      print(id)
+#      mintree=comp2tree[comp]
+#      nodes=[int(re.split('[:_]', node)[1]) for node in mintree.nodes if not 'ctg' in node]
+#      if len(nodes)>0:
+#        chrs=[re.split('[:_]', node)[0] for node in mintree.nodes if not 'ctg' in node]
+#        chr=Counter(chrs).most_common(1)[0][0]
+#        nodes.sort()
+#        dists=[]
+#        ones=[]
+#        for kk in range(len(nodes)):
+#          dists.append(nodes[kk]-nodes[0]+1)
+#          ones.append(1)
+#          dstr=','.join(map(str, dists))
+#          onestr=','.join(map(str,ones))
+#        print(chr+'\t'+str(nodes[0])+'\t'+str(max(nodes))+'\t'+id+'\t100\t.\t'+str(nodes[0])+'\t'+str(max(nodes))+'\t0,150,0\t'+str(len(dists))+'\t'+onestr+'\t'+dstr, file=outb)
+#
+#  code.interact(local=locals())  
+#supercomp2tree[s0].add_edge(edge[0], edge[1], cts=edge[2]['cts'], mns=edge[2]['mns'], dist=edge[2]['dist'], wt=edge[2]['wt'])
 #
 #
 #
@@ -341,13 +356,7 @@ def main():
 #  edge[2]['min_dist']=min(superg.edges[node1, node2]['dist'])
 #  
 #  for ii in comp2tree.keys():
-#    phase_conf_component_tree(comp2tree[ii])        
-
-
-
-  
-  
-#
+#    phase_conf_component_tree(comp2tree[ii])        #
 #
 #    haps=phase_conf_component_tree(gg[jj])
 #    bad_edges=[(u,v,e) for u,v,e in Gloc.subgraph(gg[jj].nodes).edges(data=True) if  e['conf'] == False]

@@ -21,10 +21,10 @@ def pre_filter_strict_pass(cts, mns, minfrac=0.95, tp='het-het'):
       ors=[[0,3], [1,2]]
       for ort in ors:
         [aa, bb]=ort
-        if aa+bb>thresh:
+        if cts[aa]+cts[bb]>thresh:
           orient=str(aa)+'_'+str(bb)
-          bal=aa*1.0/(aa+bb)
-          dist=0.5*(aa+bb)
+          bal=cts[aa]*1.0/(cts[aa]+cts[bb])
+          dist=0.5*(mns[aa]+mns[bb])
           break
       if bal>0.1 and bal<0.9:
         passf=True
@@ -32,10 +32,10 @@ def pre_filter_strict_pass(cts, mns, minfrac=0.95, tp='het-het'):
       ors=[[0,1], [0,2], [2,3], [1,3]]
       for ort in ors:
         [aa, bb]=ort
-        if aa+bb>thresh:
+        if cts[aa]+cts[bb]>thresh:
           orient=str(aa)+'_'+str(bb)
-          bal=aa*1.0/(aa+bb)
-          dist=0.5*(aa+bb)
+          bal=cts[aa]*1.0/(cts[aa]+cts[bb])
+          dist=0.5*(mns[aa]+mns[bb])
           break
       if bal>0.1 and bal<0.9:
         passf=True
@@ -52,32 +52,27 @@ def pre_filter_strict_pass(cts, mns, minfrac=0.95, tp='het-het'):
 
 def pre_filter_loose_pass(cts, mns, minfrac=0.90, minct=2, tp='het-het'):
   nn=sum(cts)
-  passf=False; bal=-1; orient=''; dist=-1  
-
-  if nn>=2:
+  passf=False; orient=''; dist=-1
+  if nn>=minct:
     thresh=minfrac*nn
     if tp=='het-het':
       ors=[[0,3], [1,2]]
       for ort in ors:
         [aa, bb]=ort
-        if aa+bb>thresh:
+        if cts[aa]+cts[bb]>thresh:
           orient=str(aa)+'_'+str(bb)
-          bal=aa*1.0/(aa+bb)
-          dist=0.5*(aa+bb)
+          dist=0.5*(mns[aa]+mns[bb])
+          passf=True
           break
-      if bal>0.1 and bal<0.9:
-        passf=True
     elif tp=='het-hom':
       ors=[[0,1], [0,2], [2,3], [1,3]]
       for ort in ors:
         [aa, bb]=ort
-        if aa+bb>thresh:
+        if cts[aa]+cts[bb]>thresh:
           orient=str(aa)+'_'+str(bb)
-          bal=aa*1.0/(aa+bb)
-          dist=0.5*(aa+bb)
+          dist=0.5*(mns[aa]+mns[bb])
+          passf=True
           break
-      if bal>0.1 and bal<0.9:
-        passf=True
     elif tp=='hom-hom':
       mm=max(cts)
       for ii in range(4):
@@ -88,20 +83,23 @@ def pre_filter_loose_pass(cts, mns, minfrac=0.90, minct=2, tp='het-het'):
         passf=True
   return [passf, orient, nn, dist]
 
-  thresh=minfrac*nn
-  if nn < minct:
-    return False
-  if tp=='het-het':
-    if  aa+dd>thresh or bb+cc>thresh:
-      passf=True
-  elif tp=='het-hom':
-    if aa+bb > thresh or aa+cc>thresh or cc+dd>thresh or bb+dd>thresh:
-      passf=True
-  elif tp=='hom-hom':
-    mm=max(cts)
-    if mm>minfrac*nn:
-      passf=True
-  return passf
+
+def comp2bed(trnodes, id, col):  
+  nodes=[int(re.split('[:_]', node)[1]) for node in trnodes if not 'ctg' in node]
+  if len(nodes)>0:
+    chrs=[re.split('[:_]', node)[0] for node in trnodes if not 'ctg' in node]
+    chr=Counter(chrs).most_common(1)[0][0]
+    nodes.sort()
+    dists=[]
+    ones=[]
+    for kk in range(len(nodes)):
+      dists.append(nodes[kk]-nodes[0]+1)
+      ones.append(1)
+    dstr=','.join(map(str, dists))
+    onestr=','.join(map(str,ones))
+    outstr=chr+'\t'+str(nodes[0])+'\t'+str(max(nodes))+'\t'+id+'\t100\t.\t'+str(nodes[0])+'\t'+str(max(nodes))+'\t'+col+'\t'+str(len(dists))+'\t'+onestr+'\t'+dstr
+    return outstr
+
 
 def odds_ratio(ll):
   [aa, bb, cc, dd]=ll

@@ -12,37 +12,81 @@ import code
 from collections import Counter
 
 
-def pre_filter_strict_pass(cts, minfrac=0.95, tp='het-het'):
-  [aa, bb, cc, dd]=cts
-  nn=aa+bb+cc+dd
-  passf=False
-  bal=-1
-  if nn<2:
-    return False
-  thresh=minfrac*nn
-  if tp=='het-het':
-    if aa+dd>thresh:
-      bal=aa*1.0/(aa+dd)
-    elif bb+cc>thresh:
-      bal=bb*1.0/(bb+cc)
-    if bal>0.1 and bal<0.9:
-      passf=True
-  elif tp=='het-hom':
-    if aa+bb>thresh:
-      bal=aa*1.0/(aa+bb)
-    elif aa+cc>thresh:
-      bal=aa*1.0/(aa+cc)
-    elif cc+dd>thresh:
-      bal=cc*1.0/(cc+dd)
-    elif bb+dd>thresh:
-      bal=bb*1.0/(bb+dd)
-    if bal>0.1 and bal<0.9:
-      passf=True
-  elif tp=='hom-hom':
-    mm=max(cts)
-    if mm>thresh:
-      passf=True
-  return passf
+def pre_filter_strict_pass(cts, mns, minfrac=0.95, tp='het-het'):
+  nn=sum(cts)
+  passf=False; bal=-1; orient=''; dist=-1
+  if nn>=2:
+    thresh=minfrac*nn
+    if tp=='het-het':
+      ors=[[0,3], [1,2]]
+      for ort in ors:
+        [aa, bb]=ort
+        if aa+bb>thresh:
+          orient=str(aa)+'_'+str(bb)
+          bal=aa*1.0/(aa+bb)
+          dist=0.5*(aa+bb)
+          break
+      if bal>0.1 and bal<0.9:
+        passf=True
+    elif tp=='het-hom':
+      ors=[[0,1], [0,2], [2,3], [1,3]]
+      for ort in ors:
+        [aa, bb]=ort
+        if aa+bb>thresh:
+          orient=str(aa)+'_'+str(bb)
+          bal=aa*1.0/(aa+bb)
+          dist=0.5*(aa+bb)
+          break
+      if bal>0.1 and bal<0.9:
+        passf=True
+    elif tp=='hom-hom':
+      mm=max(cts)
+      for ii in range(4):
+        if cts[ii]==mm:
+          orient=str(ii)
+          dist=mns[ii]
+      if mm>thresh:
+        passf=True
+  return [passf, orient, nn, dist]
+
+
+#         
+#
+#      if cts[0]+cts[3]>thresh:
+#        orient='0_3'
+#        bal=cts[0]*1.0/(cts[0]+cts[3])
+#        dist=0.5*(cts[0]+cts[3])
+#      elif cts[1]+cts[2]>thresh:
+#        orient='1_2'
+#        bal=cts[1]*1.0/(cts[1]+cts[2])
+#        dist=0.5*(cts[1]+cts[2])
+#      if bal>0.1 and bal<0.9:
+#        passf=True
+#    elif tp=='het-hom':
+#      if cts[0]+cts[1]>thresh:
+#        orient='0_1'
+#        bal=cts[0]*1.0/(cts[0]+cts[1])
+#        dist=0.5*(cts[0]+cts[1])
+#      elif cts[0]+cts[2]>thresh:
+#        orient='0_2'
+#        bal=cts[0]*1.0/(cts[0]+cts[2])
+#        dist=
+#      elif cts[2]+cts[3]>thresh:
+#        orient='2_3'
+#        bal=cts[2]*1.0/(cts[2]+cts[3])
+#      elif cts[1]+cts[3]>thresh:
+#        orient='1_3'
+#        bal=cts[1]*1.0/(cts[1]+cts[3])
+#      if bal>0.1 and bal<0.9:
+#        passf=True
+#    elif tp=='hom-hom':
+#      mm=max(cts)
+#      for ii in range(4):
+#        if cts[ii]==mm:
+#          orient=str(ii)
+#      if mm>thresh:
+#        passf=True
+#  return [passf. orient, nn]
 
 def pre_filter_loose_pass(cts, minfrac=0.90, minct=2, tp='het-het'):
   [aa, bb, cc, dd]=cts
@@ -375,13 +419,15 @@ def add_edge_to_supergraph1(edge, superg, comphash, sconf):
           ee['mns_dict'][ctstrans]=edge[2]['mns_dict'][cts]
 
 def remove_bridges(GG, min_counts_strict):
-
+  bridges=[]
   brlist=list(nx.bridges(GG))
   for edge in brlist:
     curedge=GG.edges[edge]
     if sum(curedge['cts'])<min_counts_strict:
       if abs(curedge['mns'][0]-curedge['mns'][3])>350 or abs(curedge['mns'][1]-curedge['mns'][2])>350:
-        GG.edges[edge].update({'conf': False})
+        bridges.append(curedge)
+        GG.remove_edge(edge[0], edge[1])
+  return bridges
 
 def transform(cts, trans=1):
   
