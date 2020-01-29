@@ -412,13 +412,13 @@ def add_edge_to_supergraph1(edge, superg, comphash, sconf):
           ee['min_loc_pairs'][ctstrans]=edge[2]['min_loc_pairs'][cts]
           ee['mns_dict'][ctstrans]=edge[2]['mns_dict'][cts]
 
-def remove_bridges(GG, min_counts_strict):
+def remove_bridges(GG, min_counts_strict, tp):
   bridges=[]
   brlist=list(nx.bridges(GG))
   for edge in brlist:
     curedge=GG.edges[edge]
-    if sum(curedge['cts'])<min_counts_strict:
-      if abs(curedge['mns'][0]-curedge['mns'][3])>350 or abs(curedge['mns'][1]-curedge['mns'][2])>350:
+    if curedge['wt']<min_counts_strict:
+      if tp=='hom-hom' or abs(curedge['mns'][0]-curedge['mns'][3])>350 or abs(curedge['mns'][1]-curedge['mns'][2])>350:
         bridges.append(curedge)
         GG.remove_edge(edge[0], edge[1])
   return bridges

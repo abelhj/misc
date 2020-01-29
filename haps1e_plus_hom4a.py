@@ -64,7 +64,7 @@ def main():
       line=fp.readline().strip()
       ct+=1
      
-  het_bridges=remove_bridges(Gloc, min_counts_strict)
+  het_bridges=remove_bridges(Gloc, min_counts_strict, 'het-hom')
   loc2comp={}; comp2tree={};
 
   with gzip.open(args.singletons, 'rt') as fp:
