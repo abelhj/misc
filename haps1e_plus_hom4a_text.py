@@ -14,15 +14,9 @@ def main():
   parser.add_argument('-s', '--singletons', type=str, default=None)
   parser.add_argument('-t', '--temp_prefix', type=str, default=None)
   parser.add_argument('-f', '--infile2', type=str, default=None)
-  parser.add_argument('-c', '--compfile', type=str, default=None)
-  parser.add_argument('-b', '--bedfile', type=str, default=None)
-  parser.add_argument('-e', '--edgefile', type=str, default=None)
-  parser.add_argument('-p', '--hapfile', type=str, default=None)
 
   args = parser.parse_args()
   min_counts_strict=5
-  cp = cProfile.Profile()
-  cp.enable()
   usage_denom=1024
   Gloc=nx.Graph()
   Ghom=nx.Graph()
@@ -67,12 +61,12 @@ def main():
   het_bridges=remove_bridges(Gloc, min_counts_strict, 'het-hom')
   loc2comp={}; comp2tree={};
 
-  with gzip.open(args.singletons, 'rt') as fp:
-    line=fp.readline().strip()
-    while line:
-      if not Gloc.has_node(line):
-        Gloc.add_node(line)
-      line=fp.readline().strip()
+#  with gzip.open(args.singletons, 'rt') as fp:
+#    line=fp.readline().strip()
+#    while line:
+#      if not Gloc.has_node(line):
+#        Gloc.add_node(line)
+#      line=fp.readline().strip()
 
   gg=list(Gloc.subgraph(cc) for cc in sorted(nx.connected_components(Gloc), key=len, reverse=True))
   for ii in range(len(gg)):
@@ -85,13 +79,50 @@ def main():
     for node in tr.nodes():
       loc2comp[node]=ii
 
-  ll=[loc2comp, comp2tree]
-  with open(args.temp_prefix+'.het.p', 'wb') as f:
-    pickle.dump(ll, f)
-  
-  with open(args.temp_prefix+'.hom.p', 'rb') as f:
-    [loc2comphom, comp2treehom]=pickle.load(f)
 
+  with gzip.open(args.temp_prefix+'.het.l2c.txt.gz', 'wt') as fp:
+    for loc in loc2comp.keys():
+      print(loc+'\t'+str(loc2comp[loc]), file=fp)
+
+  with gzip.open(args.temp_prefix+'.het.c2t.txt.gz', 'wt') as fp:
+    for comp in comp2tree.keys():
+      tr=comp2tree[comp]
+      for edge in tr.edges(data=True):
+        print(str(comp)+'\t'+edge[0]+'\t'+edge[1]+'\t'+str(edge[2]['conf'])+'\t'+'\t'.join(map(str, edge[2]['cts']))+'\t'+'\t'.join(map(str, edge[2]['mns']))+'\t'+edge[2]['orient']+'\t'+str(edge[2]['dist'])+'\t'+str(edge[2]['wt']),  file=fp)
+
+
+  loc2comphom={}
+  comp2treehom={}
+
+
+  with gzip.open(args.temp_prefix+'.hom.l2c.txt.gz', 'rt') as fp:
+    line=fp.readline().strip()
+    while line:
+      [loc, comp]=re.split('[\t]', line)
+      loc2comp[loc]=int(comp)
+      line=fp.readline().strip()
+
+
+
+  oldcomp=-1
+  with gzip.open(args.temp_prefix+'.hom.c2t.txt.gz', 'rt') as fp:
+    line=fp.readline().strip()
+    tr=nx.Graph()
+    while line:
+      [comp, loc1, loc2, orient, dist, wt]=re.split('[\t]', line)
+      comp=int(comp); dist=int(dist); wt=int(wt)
+      if comp==oldcomp or oldcomp<0:
+        tr.add_edge(loc1, loc2, wt=wt, dist=dist, orient=orient)
+        if oldcomp<0:
+          oldcomp=comp
+      else:
+        comp2treehom[oldcomp]=tr.copy()
+        tr=nx.Graph()
+        oldcomp=comp
+        tr.add_edge(loc1, loc2, wt=wt, dist=dist, orient=orient)
+      line=fp.readline().strip()
+
+  
   with gzip.open(args.temp_prefix+'hom.bed.gz', 'wt') as outb:
     for comp in comp2treehom.keys():
       id='hom_'+str(comp)
@@ -162,9 +193,9 @@ def main():
     for node in mintree.nodes():
       loc2compmixed[node]=ii
 
-  with open(args.temp_prefix+'.mixed.p', 'wb') as f:
-    ll=[loc2compmixed, comp2treemixed]
-    pickle.dump(ll, f)
+#  with open(args.temp_prefix+'.mixed.p', 'wb') as f:
+#    ll=[loc2compmixed, comp2treemixed]
+#    pickle.dump(ll, f)
 
 
   with gzip.open(args.temp_prefix+'mixed.bed.gz', 'wt') as outb:
@@ -183,124 +214,10 @@ def main():
     if tp=='hom':
       print(node+'\t'+str(deg))
 
-  for ii in range(18):
-    id='mixed_'+str(ii)
-    tocomp=[]
-    for node in ['hom_228', 'het_374']:
-      [tp, id]=re.split('_', node)
-      if tp=='het':
-        tr=comp2tree[int(id)]
-      else:
-        tr=comp2treehom[int(id)]
-      for node in tr.nodes():
-        tr.nodes[node]['tp']=tp
-      tocomp.append(tr)
-    Gcomp=nx.compose_all(tocomp); Gsub=Gmix.subgraph(Gcomp.nodes()); Gcomp1=nx.compose(Gsub, Gcomp)
-    mintree=nx.minimum_spanning_tree(Gcomp1, weight='dist')
-    comp2treemixed[ii]=mintree
-    for node in mintree.nodes():
-      loc2compmixed[node]=ii
-    
 
 
-hets=list(superg.neighbors('hom_228'))
-ghom=comp2treehom[228]
-
-g1=comp2treehom[228]
-ghet1=comp2tree[282]
-ghet2=comp2tree[374]
-tocomp=[g1, ghet1, ghet2]
-Gcomp=nx.compose_all(tocomp); Gsub=Gmix.subgraph(Gcomp.nodes()); Gcomp1=nx.compose(Gsub, Gcomp)
-[start, stop]=nx.periphery(Gcomp1)
-p1=nx.periphery(g1)
-phet1=nx.periphery(ghet1)
-phet2=nx.periphery(ghet2)                                      
-pp=[p1, phet1, phet2]
-dists={}
-for px in pp:
-  for ii in [0, 1]:
-    dist=nx.shortest_path_length(Gcomp1, start, px[ii], weight='dist')
-    dists[px[ii]]=dist
-
-endpts=[k  for k, v in sorted(dists.items(), key=lambda item: item[1])]
-for px in pp:
-  d0=nx.shortest_path_length(Gcomp1, start, px[0], weight='dist')
-  d1=nx.shortest_path_length(Gcomp1, start, px[1], weight='dist')
-  print(str(d0)+'\t'+str(d1))
-  if d1<d0:
-    px.reverse()
-
-homtree=comp2treehom[10]
-list(superg.neighbors('hom_10'))
-['het_272', 'het_335', 'het_88305', 'het_88343', 'het_88344', 'het_390']
-hettree={}
-pp={}
-trees=[homtree]
-pp['hom_10']=nx.periphery(homtree)
-for nb in list(superg.neighbors('hom_10')):
-  [pre, num]=re.split( '_', nb)
-  print(num)
-  hettree[nb]=comp2tree[int(num)]
-  pp[nb]=nx.periphery(hettree[nb])
-  trees.append(hettree[nb])
-Gcomp=nx.compose_all(trees); Gsub=Gmix.subgraph(Gcomp.nodes()); Gcomp1=nx.compose(Gsub, Gcomp)
-tr=nx.minimum_spanning_tree(Gcomp1, weight='dist')
-[start, end]=nx.periphery(tr)
-dists={}
-for px in pp.keys():
-  if len(pp[px])>1:
-    d0=nx.shortest_path_length(Gcomp1, start, pp[px][0], weight='dist')
-    d1=nx.shortest_path_length(Gcomp1, start, pp[px][1], weight='dist')
-    print(str(d0)+'\t'+str(d1))
-    dists[pp[px][0]]=d0
-    dists[pp[px][1]]=d1
-    if d1<d0:
-      pp[px].reverse()
-
-
-
-endpts=[k  for k, v in sorted(dists.items(), key=lambda item: item[1])]
-hethom=[]
-for pt in endpts:
-  if pt in loc2comphom:
-    hethom.append('hom')
-  elif pt in loc2comp:
-    hethom.append('het')
-  else:
-    print('error')
-ll=[]
-heton=True
-for tt in hethom:
-  if tt=='het':
-    ll.append(heton)
-    heton=not heton
-  else:
-    ll.append('hom')
-
-ll1=[]
-has_started=False
-inhet=False
-chunks=[]
-for tt in ll:
-  if tt=='hom':
-    has_started=True
-  elif not tt:
-    
-done=False
-ff=0
-while !done:
-
-
-chunk=['chr10:50275417_C_T', 'chr10:50328897_C_T']
- 
-
-for px in pp:
-  d0=nx.shortest_path_length(Gcomp1, start, px[0], weight='dist')
-  d1=nx.shortest_path_length(Gcomp1, start, px[1], weight='dist')
-  print(str(d0)+'\t'+str(d1))
-  if d1<d0:
-    px.reverse()
-
+                                           
+                                             
 
 if __name__ == "__main__":
     main()
