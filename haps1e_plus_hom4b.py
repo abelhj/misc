@@ -14,11 +14,15 @@ def main():
   parser.add_argument('-s', '--singletons', type=str, default=None)
   parser.add_argument('-t', '--temp_prefix', type=str, default=None)
   parser.add_argument('-f', '--infile2', type=str, default=None)
+  parser.add_argument('-c', '--compfile', type=str, default=None)
+  parser.add_argument('-b', '--bedfile', type=str, default=None)
+  parser.add_argument('-e', '--edgefile', type=str, default=None)
+  parser.add_argument('-p', '--hapfile', type=str, default=None)
 
   args = parser.parse_args()
   min_counts_strict=5
-  #cp = cProfile.Profile()
-  #cp.enable()
+  cp = cProfile.Profile()
+  cp.enable()
   usage_denom=1024
   Gloc=nx.Graph()
   Ghom=nx.Graph()
@@ -179,10 +183,56 @@ def main():
     if tp=='hom':
       print(node+'\t'+str(deg))
 
+  for ii in range(18):
+    id='mixed_'+str(ii)
+    tocomp=[]
+    for node in ['hom_228', 'het_374']:
+      [tp, id]=re.split('_', node)
+      if tp=='het':
+        tr=comp2tree[int(id)]
+      else:
+        tr=comp2treehom[int(id)]
+      for node in tr.nodes():
+        tr.nodes[node]['tp']=tp
+      tocomp.append(tr)
+    Gcomp=nx.compose_all(tocomp); Gsub=Gmix.subgraph(Gcomp.nodes()); Gcomp1=nx.compose(Gsub, Gcomp)
+    mintree=nx.minimum_spanning_tree(Gcomp1, weight='dist')
+    comp2treemixed[ii]=mintree
+    for node in mintree.nodes():
+      loc2compmixed[node]=ii
+    
 
 
-                                           
-                                             
+hets=list(superg.neighbors('hom_228'))
+ghom=comp2treehom[228]
+
+g1=comp2treehom[228]
+ghet1=comp2tree[282]
+ghet2=comp2tree[374]
+tocomp=[g1, ghet1, ghet2]
+Gcomp=nx.compose_all(tocomp); Gsub=Gmix.subgraph(Gcomp.nodes()); Gcomp1=nx.compose(Gsub, Gcomp)
+[start, stop]=nx.periphery(Gcomp1)
+p1=nx.periphery(g1)
+phet1=nx.periphery(ghet1)
+phet2=nx.periphery(ghet2)                                      
+pp=[p1, phet1, phet2]
+dists={}
+for px in pp:
+  for ii in [0, 1]:
+    dist=nx.shortest_path_length(Gcomp1, start, px[ii], weight='dist')
+    dists[px[ii]]=dist
+
+endpts=[k  for k, v in sorted(dists.items(), key=lambda item: item[1])]
+for px in pp:
+  d0=nx.shortest_path_length(Gcomp1, start, px[0], weight='dist')
+  d1=nx.shortest_path_length(Gcomp1, start, px[1], weight='dist')
+  print(str(d0)+'\t'+str(d1))
+  if d1<d0:
+    px.reverse()
+
+
+
+
 
 if __name__ == "__main__":
     main()

@@ -15,17 +15,10 @@ def main():
   parser.add_argument('-s', '--singletons', type=str, default=None)
   parser.add_argument('-t', '--temp_prefix', type=str, default=None)
   parser.add_argument('-f', '--infile2', type=str, default=None)
-  parser.add_argument('-c', '--compfile', type=str, default=None)
-  parser.add_argument('-b', '--bedfile', type=str, default=None)
-  parser.add_argument('-e', '--edgefile', type=str, default=None)
-  parser.add_argument('-p', '--hapfile', type=str, default=None)
 
   args = parser.parse_args()
   min_counts_strict=5
-  cp = cProfile.Profile()
-  cp.enable()
   usage_denom=1024*1024
-  Gloc=nx.Graph()
   Ghom=nx.Graph()
 
   homvar={}
