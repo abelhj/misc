@@ -63,12 +63,12 @@ def main():
   het_bridges=remove_bridges(Gloc, min_counts_strict, 'het-hom')
   loc2comp={}; comp2tree={};
 
-  with gzip.open(args.singletons, 'rt') as fp:
-    line=fp.readline().strip()
-    while line:
-      if not Gloc.has_node(line):
-        Gloc.add_node(line)
-      line=fp.readline().strip()
+#  with gzip.open(args.singletons, 'rt') as fp:
+#    line=fp.readline().strip()
+#    while line:
+#      if not Gloc.has_node(line):
+#        Gloc.add_node(line)
+#      line=fp.readline().strip()
 
   gg=list(Gloc.subgraph(cc) for cc in sorted(nx.connected_components(Gloc), key=len, reverse=True))
   for ii in range(len(gg)):
