@@ -28,9 +28,6 @@ def main():
       homvar[line]=1
       line=fp.readline().strip()
 
-  sz=get_size_of(homvar)/usage_denom
-  sys.stderr.write('homvar\t'+str(sz))
-
   Gloc=nx.Graph()
   Gloconf=nx.Graph()
 
@@ -60,19 +57,9 @@ def main():
           Gloconf.add_edge(loc1, loc2,  conf=False, cts=cts, mns=mns, wt=nn, orient=orient, dist=dist)
       line=fp.readline().strip()
       ct+=1
-
-  sz=get_size_of(Ghom)/usage_denom
-  sys.stderr.write('Ghom\t'+str(sz))
-
      
   het_bridges=remove_bridges(Gloc, min_counts_strict, 'het-hom')
   loc2comp={}; comp2tree={};
-
-  sz=get_size_of(het_bridges)/usage_denom
-  sys.stderr.write('bridges\t'+str(sz))
-  sz=get_size_of(Ghom)/usage_denom
-  sys.stderr.write('Ghom\t'+str(sz))
-
 
 #  with gzip.open(args.singletons, 'rt') as fp:
 #    line=fp.readline().strip()

@@ -2,7 +2,7 @@
 
 import gzip
 import networkx as nx
-import re
+import re, gc
 from collections import defaultdict
 import math
 import argparse
@@ -12,10 +12,23 @@ import code
 from collections import Counter
 
 
+def get_obj_size(obj):
+  marked = {id(obj)}
+  obj_q = [obj]
+  sz = 0
+  while obj_q:
+    sz += sum(map(sys.getsizeof, obj_q))
+    all_refr = ((id(o), o) for o in gc.get_referents(*obj_q))
+    new_refr = {o_id: o for o_id, o in all_refr if o_id not in marked and not isinstance(o, type)}
+    obj_q = new_refr.values()
+    marked.update(new_refr.keys())
+  return sz
+
 def pre_filter_strict_pass(cts, mns, minfrac=0.95, tp='het-het'):
   nn=sum(cts)
+  mincts=2
   passf=False; bal=-1; orient=''; dist=-1
-  if nn>=2:
+  if nn>=mincts:
     thresh=minfrac*nn
     if tp=='het-het':
       ors=[[0,3], [1,2]]
@@ -41,12 +54,13 @@ def pre_filter_strict_pass(cts, mns, minfrac=0.95, tp='het-het'):
         passf=True
     elif tp=='hom-hom':
       mm=max(cts)
-      for ii in range(4):
-        if cts[ii]==mm:
-          orient=str(ii)
-          dist=mns[ii]
-      if mm>thresh:
-        passf=True
+      if nn>2*mincts:
+        for ii in range(4):
+          if cts[ii]==mm:
+            orient=str(ii)
+            dist=mns[ii]
+        if mm>thresh:
+          passf=True
   return [passf, orient, nn, dist]
 
 
@@ -417,7 +431,7 @@ def remove_bridges(GG, min_counts_strict, tp):
   brlist=list(nx.bridges(GG))
   for edge in brlist:
     curedge=GG.edges[edge]
-    if curedge['wt']<min_counts_strict:
+    if tp=='hom-hom' or curedge['wt']<min_counts_strict:
       if tp=='hom-hom' or abs(curedge['mns'][0]-curedge['mns'][3])>350 or abs(curedge['mns'][1]-curedge['mns'][2])>350:
         bridges.append(curedge)
         GG.remove_edge(edge[0], edge[1])

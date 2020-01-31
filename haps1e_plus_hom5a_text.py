@@ -28,7 +28,7 @@ def main():
       homvar[line]=1
       line=fp.readline().strip()
 
-  sz=get_size_of(homvar)/usage_denom
+  sz=get_obj_size(homvar)/usage_denom
   sys.stderr.write('homvar\t'+str(sz))
 
   Gloc=nx.Graph()
@@ -55,23 +55,11 @@ def main():
       else:
         Gloc.add_node(loc1)
         Gloc.add_node(loc2)
-        [passf, orient, nn, dist]=pre_filter_loose_pass(cts, mns, 2, 0.95, tp)
-        if passf:
-          Gloconf.add_edge(loc1, loc2,  conf=False, cts=cts, mns=mns, wt=nn, orient=orient, dist=dist)
       line=fp.readline().strip()
       ct+=1
 
-  sz=get_size_of(Ghom)/usage_denom
-  sys.stderr.write('Ghom\t'+str(sz))
-
-     
-  het_bridges=remove_bridges(Gloc, min_counts_strict, 'het-hom')
   loc2comp={}; comp2tree={};
 
-  sz=get_size_of(het_bridges)/usage_denom
-  sys.stderr.write('bridges\t'+str(sz))
-  sz=get_size_of(Ghom)/usage_denom
-  sys.stderr.write('Ghom\t'+str(sz))
 
 
 #  with gzip.open(args.singletons, 'rt') as fp:
@@ -81,16 +69,22 @@ def main():
 #        Gloc.add_node(line)
 #      line=fp.readline().strip()
 
+  treeid=0
   gg=list(Gloc.subgraph(cc) for cc in sorted(nx.connected_components(Gloc), key=len, reverse=True))
   for ii in range(len(gg)):
+    gg_temp=gg[ii].copy()
     print(str(ii)+'\t'+str(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/usage_denom/usage_denom))
-    if gg[ii].number_of_nodes()>2:
-      tr=nx.minimum_spanning_tree(gg[ii], weight='dist')
-    else:
-      tr=gg[ii]
-    comp2tree[ii]=tr
-    for node in tr.nodes():
-      loc2comp[node]=ii
+    het_bridges=remove_bridges(gg_temp, min_counts_strict, 'het-hom')
+    gg1=list(gg_temp.subgraph(cc).copy() for cc in sorted(nx.connected_components(gg_temp), key=len, reverse=True))
+    for jj in range(len(gg1)):
+      if gg1[jj].number_of_nodes()>2:
+        tr=nx.minimum_spanning_tree(gg1[jj], weight='dist')
+      else:
+        tr=gg1[jj]
+      comp2tree[treeid]=tr
+      for node in tr.nodes():
+        loc2comp[node]=treeid
+      treeid+=1
 
 
   with gzip.open(args.temp_prefix+'.het.l2c.txt.gz', 'wt') as fp:
@@ -119,17 +113,17 @@ def main():
     line=fp.readline().strip()
     tr=nx.Graph()
     while line:
-      [comp, loc1, loc2, orient, dist, wt]=re.split('[\t]', line)
-      comp=int(comp); dist=int(dist); wt=int(wt)
+      [comp, loc1, loc2, dist]=re.split('[\t]', line)
+      comp=int(comp); dist=int(dist)
       if comp==oldcomp or oldcomp<0:
-        tr.add_edge(loc1, loc2, wt=wt, dist=dist, orient=orient)
+        tr.add_edge(loc1, loc2, dist=dist)
         if oldcomp<0:
           oldcomp=comp
       else:
         comp2treehom[oldcomp]=tr.copy()
         tr=nx.Graph()
         oldcomp=comp
-        tr.add_edge(loc1, loc2, wt=wt, dist=dist, orient=orient)
+        tr.add_edge(loc1, loc2, dist=dist)
       line=fp.readline().strip()
 
   
@@ -149,7 +143,8 @@ def main():
       str1=comp2bed(mintree.nodes, id, '150,0,0')
       if str1 is not None:
         print(str1, file=outb)
-
+  
+  
 
   Gmix=nx.Graph(); superg=nx.Graph()
 

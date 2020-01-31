@@ -28,7 +28,7 @@ def main():
       homvar[line]=1
       line=fp.readline().strip()
 
-  with gzip.open(args.infile, 'rt') as fp, gzip.open(args.temp_prefix+'.het.txt.gz', 'wt') as fhet, gzip.open(args.temp_prefix+'.mixed.txt.gz', 'wt') as fmix:
+  with gzip.open(args.infile, 'rt') as fp, gzip.open(args.temp_prefix+'.het.txt.gz', 'wt') as fhet, gzip.open(args.temp_prefix+'.mixed.txt.gz', 'wt') as fmix, gzip.open(args.temp_prefix+'.hom.txt.gz', 'wt') as fhom:
     line=fp.readline().strip()
     ct=0
     while line:
@@ -52,7 +52,7 @@ def main():
           mns=[mns[0], mns[2], mns[1], mns[3]]
         [passf, orient, nn, dist]=pre_filter_strict_pass(cts, mns, 0.95, tp)
         if passf:
-          Ghom.add_edge(loc1, loc2, orient=orient, dist=int(dist), wt=nn)
+          Ghom.add_edge(loc1, loc2, dist=int(dist))
       line=fp.readline().strip()
       ct+=1
 
