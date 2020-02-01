@@ -209,7 +209,7 @@ def main():
   gg=list(superg.subgraph(cc) for cc in sorted(nx.connected_components(superg), key=len, reverse=True))
   comp2treemixed={};  loc2compmixed={}
 
-  code.interact(local=locals())
+  #code.interact(local=locals())
 
   for ii in range(len(gg)):
     id='mixed_'+str(ii)
