@@ -62,12 +62,12 @@ def main():
 
 
 
-#  with gzip.open(args.singletons, 'rt') as fp:
-#    line=fp.readline().strip()
-#    while line:
-#      if not Gloc.has_node(line):
-#        Gloc.add_node(line)
-#      line=fp.readline().strip()
+  with gzip.open(args.singletons, 'rt') as fp:
+    line=fp.readline().strip()
+    while line:
+      if not Gloc.has_node(line):
+        Gloc.add_node(line)
+      line=fp.readline().strip()
 
   treeid=0
   gg=list(Gloc.subgraph(cc) for cc in sorted(nx.connected_components(Gloc), key=len, reverse=True))
@@ -126,6 +126,38 @@ def main():
         tr.add_edge(loc1, loc2, dist=dist)
       line=fp.readline().strip()
 
+
+
+  oldcomp=-1
+  with gzip.open(args.temp_prefix+'.het.c2t.txt.gz', 'rt') as fp:
+    line=fp.readline().strip()
+    tr=nx.Graph()
+    while line:
+      [comp, loc1, loc2, orient, dist, wt]=re.split('[\t]', line)
+      comp=int(comp); dist=int(float(dist)); wt=int(wt)
+      if comp==oldcomp or oldcomp<0:
+        tr.add_edge(loc1, loc2, dist=dist, wt=wt, orient=orient)
+        if oldcomp<0:
+          oldcomp=comp
+      else:
+        comp2tree[oldcomp]=tr.copy()
+        tr=nx.Graph()
+        oldcomp=comp
+        tr.add_edge(loc1, loc2, dist=dist, wt=wt, orient=orient)
+      line=fp.readline().strip()
+
+  with gzip.open(args.temp_prefix+'.het.l2c.txt.gz', 'rt') as fp:
+    line=fp.readline().strip()
+    while line:
+      [loc, comp]=re.split('[\t]', line)
+      comp=int(comp)
+      loc2comp[loc]=comp
+      if not comp in comp2tree:
+        tr=nx.Graph()
+        tr.add_node(loc)
+        comp2tree[comp]=tr
+      line=fp.readline().strip()
+
   
   with gzip.open(args.temp_prefix+'hom.bed.gz', 'wt') as outb:
     for comp in comp2treehom.keys():
@@ -144,7 +176,7 @@ def main():
       if str1 is not None:
         print(str1, file=outb)
   
-  
+#  code.interact(local=locals()) 
 
   Gmix=nx.Graph(); superg=nx.Graph()
 
@@ -175,14 +207,16 @@ def main():
       ct+=1
 
   gg=list(superg.subgraph(cc) for cc in sorted(nx.connected_components(superg), key=len, reverse=True))
-  comp2treemixed={}
-  loc2compmixed={}
+  comp2treemixed={};  loc2compmixed={}
+
+  code.interact(local=locals())
 
   for ii in range(len(gg)):
     id='mixed_'+str(ii)
     tocomp=[]
     for node in gg[ii].nodes():
       [tp, id]=re.split('_', node)
+      print(node)
       if tp=='het':
         tr=comp2tree[int(id)]
       else:
